@@ -1,0 +1,35 @@
+name: Memory Safety Check
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-sanitize:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake qt6-base-dev
+
+    - name: Configure CMake with AddressSanitizer
+      run: >
+        cmake -B build -S .
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_CXX_FLAGS="-fsanitize=address -g"
+        -DCMAKE_C_FLAGS="-fsanitize=address -g"
+
+    - name: Build project
+      run: cmake --build build
+
+    - name: Run tests (if any)
+      # Add a step here to run your test suite
+      # For example: ctest --test-dir build
+      run: echo "No tests to run"

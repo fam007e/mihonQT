@@ -1,0 +1,36 @@
+#include "Manga.h"
+
+Manga::Manga(long id, long source, const QString& url, const QString& title,
+             const QString& artist, const QString& author, const QString& description,
+             const QString& genre, int status, const QString& thumbnailUrl,
+             bool favorite, long lastUpdate, long nextUpdate, int fetchInterval,
+             long dateAdded, long viewerFlags, long chapterFlags, long coverLastModified,
+             UpdateStrategy updateStrategy, bool initialized, long lastModifiedAt,
+             long favoriteModifiedAt, long version, const QString& notes, bool isSyncing)
+    : m_id(id),
+      m_source(source),
+      m_url(url),
+      m_title(title),
+      m_artist(artist),
+      m_author(author),
+      m_description(description),
+      m_genre(genre),
+      m_status(status),
+      m_thumbnailUrl(thumbnailUrl),
+      m_favorite(favorite),
+      m_lastUpdate(lastUpdate),
+      m_nextUpdate(nextUpdate),
+      m_fetchInterval(fetchInterval),
+      m_dateAdded(dateAdded),
+      m_viewerFlags(viewerFlags),
+      m_chapterFlags(chapterFlags),
+      m_coverLastModified(coverLastModified),
+      m_updateStrategy(updateStrategy),
+      m_initialized(initialized),
+      m_lastModifiedAt(lastModifiedAt),
+      m_favoriteModifiedAt(favoriteModifiedAt),
+      m_version(version),
+      m_notes(notes),
+      m_isSyncing(isSyncing)
+{
+}
