@@ -17,15 +17,16 @@
 #include "source/JavascriptSource.h" // Include JavascriptSource
 #include "model/Manga.h" // Include for signal/slot
 #include "model/Chapter.h" // [NEW]
-#include "ui/SourceListView.h" // [NEW]
-#include "ui/MangaListView.h" // [NEW]
-#include "ui/LibraryView.h"      // [NEW]
-#include "ui/MangaDetailsView.h" // [NEW]
-#include "ui/SettingsView.h"     // [NEW]
+#include "ui/SourceListView.h"
+#include "ui/SourceBrowseView.h"
+#include "ui/MangaDetailsView.h"
+#include "ui/SettingsView.h"
 
 // Forward declarations for new UI components
-// class SourceListView; // No longer needed, now included
-// class MangaListView; // No longer needed, now included
+class SidebarWidget;
+class UpdatesView;
+class HistoryView;
+class LibraryView;
 
 class MainWindow : public QMainWindow
 {
@@ -40,6 +41,8 @@ private slots:
     void onMangaSelected(const Manga& manga);   // Slot for when a manga is selected
     void onChapterSelected(const Manga& manga, const Chapter& chapter); // [NEW]
     void onBackRequested(); // [NEW]
+    void onLocalMangaPathChanged(const QString& newPath);
+    void onNavigationRequested(int index);
 
 private:
     void setupUi();
@@ -48,44 +51,46 @@ private:
     void showReader(long mangaId, long chapterId);
     void showMangaDetails(const Manga& manga); // [NEW]
 
-    QSqlDatabase m_database;
+    // QSqlDatabase m_database; // Removed member
     SourceManager *m_sourceManager;
-    
+    int m_lastContentIndex = 0;
+    long m_currentSourceId = -1; // [NEW] Track current source
+
     // Navigation
     QTabWidget *m_mainTabWidget; // [NEW] Top-level tabs (Library, Browse)
-    
+
     // Browse Tab Stack
-    QStackedWidget *m_browseStack; 
-    SourceListView *m_sourceListView;
-    MangaListView *m_mangaListView;
-
-    // Library Tab Stack (Optional, if we want details view inside library tab)
-    // For simplicity, let's put DetailsView in both or use a global stack?
-    // Better approach:
-    // Tab 1: LibraryView
-    // Tab 2: Browse (SourceList -> MangaList)
-    // When a manga is selected in EITHER, we switch to a "Details" view?
-    // Or we have a global QStackedWidget containing:
-    // 1. MainTabs (Library, Browse)
-    // 2. MangaDetails
-    // 3. Reader
-    
-    QStackedWidget *m_mainStack; // Replaces m_stackedWidget as the central widget
-    
-    LibraryView *m_libraryView;
-    MangaDetailsView *m_mangaDetailsView;
-    ReaderWidget *m_readerWidget;
-    SettingsView *m_settingsView;
-
     QJSEngine *m_jsEngine;
     NetworkAccessManager *m_networkManager;
 
-    // Hamburger Menu
+    // UI Structure
+    QStackedWidget *m_rootStack;      // Level 1: [Dashboard, Reader]
+
+    // Dashboard (Level 2)
+    QWidget *m_dashboardWidget;
+    SidebarWidget *m_sidebar;
+    QStackedWidget *m_contentStack;   // Level 3: [Library, Updates, History, Browse, Details, Settings]
+
+    // Views
+    LibraryView *m_libraryView;
+    UpdatesView *m_updatesView;
+    HistoryView *m_historyView;
+
+    QStackedWidget *m_browseStack;
+    SourceListView *m_sourceListView;
+    SourceBrowseView *m_sourceBrowseView;
+
+    MangaDetailsView *m_mangaDetailsView;
+    SettingsView *m_settingsView;
+
+    ReaderWidget *m_readerWidget;
+
+    // Main Window Widgets
     QToolBar *m_toolBar;
     QAction *m_hamburgerAction;
     QMenu *m_hamburgerMenu;
-    
-    // Hamburger Menu Actions
+
+    // Menu Actions
     QAction *m_downloadedOnlyAction;
     QAction *m_incognitoModeAction;
     QAction *m_downloadQueueAction;

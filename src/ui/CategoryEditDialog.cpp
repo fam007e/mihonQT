@@ -6,6 +6,7 @@
 
 CategoryEditDialog::CategoryEditDialog(QWidget *parent) : QDialog(parent)
 {
+    qDebug() << "CategoryEditDialog::CategoryEditDialog created. Parent:" << parent;
     setWindowTitle("Edit Categories");
     resize(400, 500);
 

@@ -7,6 +7,8 @@
 #include <QXmlStreamReader>
 #include <QStringConverter>
 #include <QRegularExpression>
+#include <QStandardPaths>
+#include <QCryptographicHash>
 #include "quazip/quazip.h"
 #include "quazip/quazipfile.h"
 
@@ -81,14 +83,78 @@ Manga LocalSource::mangaFromDirectory(const QDir& mangaDir) const
     manga.setUrl(mangaDir.absolutePath()); // Using absolute path as URL for local source
     manga.setSource(ID);
     manga.setInitialized(true);
-    manga.setFavorite(true); // Assume local manga are always favorited
+    manga.setFavorite(false); // Do not favorite by default
     manga.setDateAdded(QDateTime::currentSecsSinceEpoch()); // Or use directory creation/modification time
 
-    // Dummy thumbnail_url for now
-    // In a real implementation, you'd scan the directory for a cover image
-    manga.setThumbnailUrl(""); 
+    // Thumbnail: look for cover image in directory
+    QStringList imageFilters = {"cover.*", "folder.*", "poster.*", "*.jpg", "*.png", "*.jpeg"};
+    QFileInfoList images = mangaDir.entryInfoList(imageFilters, QDir::Files, QDir::Name);
+    if (!images.isEmpty()) {
+        manga.setThumbnailUrl(images.first().absoluteFilePath());
+    } else {
+        // Fallback: try to extract from first CBZ
+        QString cachedCover = extractCoverFromArchive(mangaDir);
+        manga.setThumbnailUrl(cachedCover);
+    }
 
     return manga;
+}
+
+QString LocalSource::extractCoverFromArchive(const QDir& mangaDir) const
+{
+    QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/covers";
+    QDir().mkpath(cacheDir);
+
+    QString mangaId = QString(QCryptographicHash::hash(mangaDir.absolutePath().toUtf8(), QCryptographicHash::Md5).toHex());
+    QString cachePath = cacheDir + "/" + mangaId + ".jpg";
+
+    if (QFile::exists(cachePath)) {
+        return cachePath;
+    }
+
+    // Look for archives
+    QFileInfoList archives = mangaDir.entryInfoList({"*.cbz", "*.zip"}, QDir::Files, QDir::Name);
+    if (archives.isEmpty()) return "";
+
+    QuaZip zip(archives.first().absoluteFilePath());
+    if (!zip.open(QuaZip::mdUnzip)) return "";
+
+    // Find first image file
+    bool found = false;
+    QString firstImage;
+    QStringList imageExts = {".jpg", ".jpeg", ".png", ".webp"};
+
+    for (bool more = zip.goToFirstFile(); more; more = zip.goToNextFile()) {
+        QString fileName = zip.getCurrentFileName();
+        bool isImage = false;
+        for (const QString& ext : imageExts) {
+            if (fileName.endsWith(ext, Qt::CaseInsensitive)) {
+                isImage = true;
+                break;
+            }
+        }
+        if (isImage) {
+            firstImage = fileName;
+            found = true;
+            break;
+        }
+    }
+
+    if (found) {
+        QuaZipFile zipFile(&zip);
+        if (zipFile.open(QIODevice::ReadOnly)) {
+            QByteArray data = zipFile.readAll();
+            QFile outFile(cachePath);
+            if (outFile.open(QIODevice::WriteOnly)) {
+                outFile.write(data);
+                outFile.close();
+            }
+            zipFile.close();
+        }
+    }
+
+    zip.close();
+    return found ? cachePath : "";
 }
 
 QList<Manga> LocalSource::getPopularManga()
@@ -140,33 +206,38 @@ QString readComicInfoXml(const QByteArray &data)
 
 Manga LocalSource::getMangaDetails(const Manga& manga)
 {
-    Manga mutableManga = manga; // Make a mutable copy
+    Manga mutableManga = manga;
     QByteArray comicInfoData;
     bool found = false;
 
-    QFileInfo mangaPathInfo(manga.url());
+    QDir mangaDir(manga.url());
+    if (!mangaDir.exists()) return mutableManga;
 
-    if (mangaPathInfo.isDir()) {
-        QFile comicInfoFile(manga.url() + "/ComicInfo.xml");
-        if (comicInfoFile.exists() && comicInfoFile.open(QIODevice::ReadOnly)) {
-            comicInfoData = comicInfoFile.readAll();
-            comicInfoFile.close();
-            found = true;
-        }
-    } else if (manga.url().startsWith("cbz://")) {
-        QString archivePath = manga.url();
-        archivePath.remove(0, 6);
-        QuaZip zip(archivePath);
-        if (zip.open(QuaZip::mdUnzip)) {
-            if (zip.setCurrentFile("ComicInfo.xml", QuaZip::csInsensitive)) {
-                QuaZipFile comicInfoFile(&zip);
-                if (comicInfoFile.open(QIODevice::ReadOnly)) {
-                    comicInfoData = comicInfoFile.readAll();
-                    comicInfoFile.close();
-                    found = true;
+    // 1. Check for ComicInfo.xml in root directory
+    QFile rootComicInfo(mangaDir.filePath("ComicInfo.xml"));
+    if (rootComicInfo.exists() && rootComicInfo.open(QIODevice::ReadOnly)) {
+        comicInfoData = rootComicInfo.readAll();
+        rootComicInfo.close();
+        found = true;
+    }
+
+    // 2. If not found, look inside first few CBZs
+    if (!found) {
+        QFileInfoList archives = mangaDir.entryInfoList({"*.cbz", "*.zip"}, QDir::Files, QDir::Name);
+        for (int i = 0; i < qMin(3, (int)archives.size()); ++i) {
+            QuaZip zip(archives[i].absoluteFilePath());
+            if (zip.open(QuaZip::mdUnzip)) {
+                if (zip.setCurrentFile("ComicInfo.xml", QuaZip::csInsensitive)) {
+                    QuaZipFile zipFile(&zip);
+                    if (zipFile.open(QIODevice::ReadOnly)) {
+                        comicInfoData = zipFile.readAll();
+                        zipFile.close();
+                        found = true;
+                    }
                 }
+                zip.close();
             }
-            zip.close();
+            if (found) break;
         }
     }
 
@@ -177,29 +248,24 @@ Manga LocalSource::getMangaDetails(const Manga& manga)
         while (!xml.atEnd() && !xml.hasError()) {
             QXmlStreamReader::TokenType token = xml.readNext();
             if (token == QXmlStreamReader::StartElement) {
-                if (xml.name() == QLatin1String("Title"))
-                    mutableManga.setTitle(xml.readElementText());
-                else if (xml.name() == QLatin1String("Series"))
-                    mutableManga.setTitle(xml.readElementText()); // Often series is the main title
-                else if (xml.name() == QLatin1String("Summary"))
-                    mutableManga.setDescription(xml.readElementText());
-                else if (xml.name() == QLatin1String("Writer"))
-                    mutableManga.setAuthor(xml.readElementText());
-                else if (xml.name() == QLatin1String("Penciller"))
-                    mutableManga.setArtist(xml.readElementText());
-                else if (xml.name() == QLatin1String("Genre"))
-                    mutableManga.setGenre(xml.readElementText());
-                else if (xml.name() == QLatin1String("PublishingStatusTachiyomi"))
-                {
+                QString name = xml.name().toString();
+                if (name == "Series") {
+                    QString val = xml.readElementText();
+                    if (!val.isEmpty()) mutableManga.setTitle(val);
+                }
+                else if (name == "Title" && mutableManga.title().isEmpty()) {
+                     mutableManga.setTitle(xml.readElementText());
+                }
+                else if (name == "Summary") mutableManga.setDescription(xml.readElementText());
+                else if (name == "Writer") mutableManga.setAuthor(xml.readElementText());
+                else if (name == "Penciller") mutableManga.setArtist(xml.readElementText());
+                else if (name == "Genre") mutableManga.setGenre(xml.readElementText());
+                else if (name == "PublishingStatusTachiyomi") {
                     QString status = xml.readElementText();
                     if (status == "Ongoing") mutableManga.setStatus(MangaStatus::ONGOING);
                     else if (status == "Completed") mutableManga.setStatus(MangaStatus::COMPLETED);
-                    // Add other status mappings as needed
                 }
             }
-        }
-        if (xml.hasError()) {
-            qWarning() << "XML parsing error:" << xml.errorString();
         }
     }
 
@@ -219,34 +285,43 @@ QList<SChapter> LocalSource::getChapterList(const Manga& manga)
     }
 
     if (mangaPathInfo.isDir()) {
-        qDebug() << "Manga URL is a directory:" << manga.url();
         QDir mangaDir(manga.url());
         QFileInfoList entries = mangaDir.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
-        qDebug() << "Found" << entries.size() << "entries in manga directory.";
-        
-        double chapterNumber = 1.0;
+
+        QRegularExpression chapterRegex("(?:^|[\\s_])(?:ch|chapter|ch\\.|v|vol|volume|#)?[\\s_]*(\\d+(?:\\.\\d+)?)", QRegularExpression::CaseInsensitiveOption);
+
         for (const QFileInfo &entry : entries) {
-            qDebug() << "Processing entry:" << entry.fileName() << "Is Dir:" << entry.isDir() << "Is File:" << entry.isFile() << "Suffix:" << entry.suffix();
+            SChapter chapter;
+            bool isChapter = false;
+
             if (entry.isDir()) {
-                // Treat sub-directory as a chapter
-                SChapter chapter;
-                chapter.setUrl(entry.absoluteFilePath()); // URL is path to chapter folder
-                chapter.setName(entry.fileName());
-                chapter.setDateUpload(entry.lastModified().toSecsSinceEpoch());
-                chapter.setChapterNumber(chapterNumber++);
-                chapters.append(chapter);
-                qDebug() << "Added directory chapter:" << chapter.name() << "URL:" << chapter.url();
-            } else if (entry.isFile() && entry.suffix().compare("cbz", Qt::CaseInsensitive) == 0) {
-                // Treat CBZ file as a chapter
-                SChapter chapter;
-                chapter.setUrl(QString("cbz://%1").arg(entry.absoluteFilePath())); // URL is path to CBZ file
-                chapter.setName(entry.fileName());
-                chapter.setDateUpload(entry.lastModified().toSecsSinceEpoch());
-                chapter.setChapterNumber(chapterNumber++);
-                chapters.append(chapter);
-                qDebug() << "Added CBZ file chapter:" << chapter.name() << "URL:" << chapter.url();
+                chapter.setUrl(entry.absoluteFilePath());
+                isChapter = true;
+            } else if (entry.isFile() && (entry.suffix().compare("cbz", Qt::CaseInsensitive) == 0 || entry.suffix().compare("zip", Qt::CaseInsensitive) == 0)) {
+                chapter.setUrl(QString("cbz://%1").arg(entry.absoluteFilePath()));
+                isChapter = true;
             }
-            // Ignore other loose files for now
+
+            if (isChapter) {
+                chapter.setName(entry.fileName());
+                chapter.setDateUpload(entry.lastModified().toSecsSinceEpoch());
+
+                // Try to parse chapter number from filename
+                QRegularExpressionMatch match = chapterRegex.match(entry.fileName());
+                if (match.hasMatch()) {
+                    chapter.setChapterNumber(match.captured(1).toDouble());
+                } else {
+                    // Fallback to finding ANY number in the string
+                    QRegularExpression fallbackRegex("(\\d+(?:\\.\\d+)?)");
+                    QRegularExpressionMatch fallbackMatch = fallbackRegex.match(entry.fileName());
+                    if (fallbackMatch.hasMatch()) {
+                        chapter.setChapterNumber(fallbackMatch.captured(1).toDouble());
+                    } else {
+                        chapter.setChapterNumber(-1.0); // Unknown
+                    }
+                }
+                chapters.append(chapter);
+            }
         }
     } else if (mangaPathInfo.isFile() && mangaPathInfo.suffix().compare("cbz", Qt::CaseInsensitive) == 0) {
         qDebug() << "Manga URL is a CBZ file:" << manga.url();
@@ -263,7 +338,7 @@ QList<SChapter> LocalSource::getChapterList(const Manga& manga)
     } else {
         qWarning() << "Unsupported manga file type or format for direct manga file:" << manga.url();
     }
-    
+
     // Sort chapters by chapterNumber or natural sort of name
     std::sort(chapters.begin(), chapters.end(), [](const SChapter& a, const SChapter& b) {
         // Handle potential non-numeric chapter names for sorting, or use default chapterNumber

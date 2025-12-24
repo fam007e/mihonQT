@@ -17,8 +17,11 @@ public:
 
 signals:
     void chapterSelected(const Manga& manga, const Chapter& chapter);
-    void backRequested();
     void libraryStatusChanged(); // Signal when added/removed from library
+    void backRequested();
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
 
 private:
     void setupUi();
@@ -32,6 +35,7 @@ private:
     QLabel *m_authorLabel;
     QLabel *m_descriptionLabel;
     QPushButton *m_libraryButton;
+    QPushButton *m_editCategoriesButton; // New button
     QListWidget *m_chapterListWidget;
 };
 

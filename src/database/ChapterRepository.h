@@ -11,17 +11,18 @@ class Chapter;
 class ChapterRepository
 {
 public:
-    explicit ChapterRepository(QSqlDatabase& db);
+    explicit ChapterRepository(); // Removed QSqlDatabase argument
 
     // CRUD operations
     bool insertChapter(const Chapter& chapter);
     bool updateChapter(const Chapter& chapter);
     Chapter getChapterById(long id);
     QList<Chapter> getChaptersByMangaId(long mangaId);
+    int getUnreadCountByMangaId(long mangaId); // NEW
     bool deleteChapter(long id);
 
 private:
-    QSqlDatabase& m_db;
+    // QSqlDatabase m_db; // Removed member // Store by value
 
     Chapter chapterFromQuery(QSqlQuery& query);
 };

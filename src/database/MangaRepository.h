@@ -13,7 +13,7 @@ class Manga;
 class MangaRepository
 {
 public:
-    explicit MangaRepository(QSqlDatabase& db);
+    explicit MangaRepository(); // Removed QSqlDatabase argument
 
     // CRUD operations
     bool insertManga(const Manga& manga);
@@ -25,7 +25,7 @@ public:
     Manga getMangaByUrl(const QString& url, long sourceId);
 
 private:
-    QSqlDatabase& m_db;
+    // QSqlDatabase m_db; // Removed member // Store by value
 
     Manga mangaFromQuery(QSqlQuery& query);
 };

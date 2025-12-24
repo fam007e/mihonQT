@@ -5,14 +5,13 @@
 #include <QDebug>
 #include <QVariant>
 
-ChapterRepository::ChapterRepository(QSqlDatabase& db)
-    : m_db(db)
+ChapterRepository::ChapterRepository()
 {
 }
 
 bool ChapterRepository::insertChapter(const Chapter& chapter)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("INSERT INTO chapters ("
                   "manga_id, url, name, scanlator, read, bookmark, last_page_read, chapter_number, "
                   "source_order, date_fetch, date_upload, last_modified_at, version, is_syncing"
@@ -45,7 +44,7 @@ bool ChapterRepository::insertChapter(const Chapter& chapter)
 
 bool ChapterRepository::updateChapter(const Chapter& chapter)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("UPDATE chapters SET "
                   "manga_id = :manga_id, url = :url, name = :name, scanlator = :scanlator, "
                   "read = :read, bookmark = :bookmark, last_page_read = :last_page_read, "
@@ -79,7 +78,7 @@ bool ChapterRepository::updateChapter(const Chapter& chapter)
 
 Chapter ChapterRepository::getChapterById(long id)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("SELECT * FROM chapters WHERE _id = :id");
     query.bindValue(":id", static_cast<qlonglong>(id));
     if (query.exec() && query.next()) {
@@ -92,7 +91,7 @@ Chapter ChapterRepository::getChapterById(long id)
 QList<Chapter> ChapterRepository::getChaptersByMangaId(long mangaId)
 {
     QList<Chapter> chapters;
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("SELECT * FROM chapters WHERE manga_id = :manga_id ORDER BY chapter_number ASC");
     query.bindValue(":manga_id", static_cast<qlonglong>(mangaId));
     if (query.exec()) {
@@ -105,9 +104,20 @@ QList<Chapter> ChapterRepository::getChaptersByMangaId(long mangaId)
     return chapters;
 }
 
+int ChapterRepository::getUnreadCountByMangaId(long mangaId)
+{
+    QSqlQuery query;
+    query.prepare("SELECT COUNT(*) FROM chapters WHERE manga_id = :manga_id AND read = 0");
+    query.bindValue(":manga_id", static_cast<qlonglong>(mangaId));
+    if (query.exec() && query.next()) {
+        return query.value(0).toInt();
+    }
+    return 0;
+}
+
 bool ChapterRepository::deleteChapter(long id)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("DELETE FROM chapters WHERE _id = :id");
     query.bindValue(":id", static_cast<qlonglong>(id));
     if (!query.exec()) {

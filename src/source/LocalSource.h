@@ -48,6 +48,7 @@ private:
 
     QList<QDir> getFilesInBaseDirectory() const;
     Manga mangaFromDirectory(const QDir& mangaDir) const;
+    QString extractCoverFromArchive(const QDir& mangaDir) const;
 };
 
 #endif // LOCALSOURCE_H

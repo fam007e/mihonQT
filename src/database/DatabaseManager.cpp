@@ -6,6 +6,10 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QDir>
+#include "MangaRepository.h"
+#include "ChapterRepository.h"
+#include "HistoryRepository.h"
+#include "CategoryRepository.h"
 
 DatabaseManager& DatabaseManager::instance()
 {
@@ -22,12 +26,16 @@ DatabaseManager::~DatabaseManager()
     if (m_db.isOpen()) {
         m_db.close();
     }
+    delete m_mangaRepo;
+    delete m_chapterRepo;
+    delete m_historyRepo;
+    delete m_categoryRepo;
 }
 
 bool DatabaseManager::openDatabase(const QString& path)
 {
     m_db = QSqlDatabase::addDatabase("QSQLITE");
-    
+
     // Set database path in a standard location
     QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(dbPath);
@@ -78,6 +86,48 @@ bool DatabaseManager::initializeDatabase()
         }
     }
 
+    // Ensure 'chapters' table has the new columns for existing databases
+    QSqlQuery checkQuery;
+    checkQuery.exec("PRAGMA table_info(chapters)");
+    bool hasVersion = false;
+    bool hasIsSyncing = false;
+    while (checkQuery.next()) {
+        QString name = checkQuery.value(1).toString();
+        if (name == "version") hasVersion = true;
+        if (name == "is_syncing") hasIsSyncing = true;
+    }
+
+    if (!hasVersion) {
+        query.exec("ALTER TABLE chapters ADD COLUMN version INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!hasIsSyncing) {
+        query.exec("ALTER TABLE chapters ADD COLUMN is_syncing INTEGER NOT NULL DEFAULT 0");
+    }
+
     qDebug() << "Database schema initialized successfully.";
     return true;
+}
+
+MangaRepository& DatabaseManager::mangaRepository()
+{
+    if (!m_mangaRepo) m_mangaRepo = new MangaRepository();
+    return *m_mangaRepo;
+}
+
+ChapterRepository& DatabaseManager::chapterRepository()
+{
+    if (!m_chapterRepo) m_chapterRepo = new ChapterRepository();
+    return *m_chapterRepo;
+}
+
+HistoryRepository& DatabaseManager::historyRepository()
+{
+    if (!m_historyRepo) m_historyRepo = new HistoryRepository();
+    return *m_historyRepo;
+}
+
+CategoryRepository& DatabaseManager::categoryRepository()
+{
+    if (!m_categoryRepo) m_categoryRepo = new CategoryRepository();
+    return *m_categoryRepo;
 }

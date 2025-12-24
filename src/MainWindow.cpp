@@ -4,100 +4,42 @@
 #include "database/ChapterRepository.h"
 #include "model/Manga.h"
 #include "model/Chapter.h"
-#include "source/LocalSource.h" // Needed for dummy data
-#include "ui/SourceListView.h"  // Include for SourceListView
-#include "ui/MangaListView.h"   // Include for MangaListView
+#include "source/LocalSource.h"
+#include "ui/SourceListView.h"
+#include "ui/MangaListView.h"
+#include "ui/LibraryView.h"
+#include "ui/UpdatesView.h"
+#include "ui/HistoryView.h"
+#include "ui/MangaDetailsView.h"
+#include "ui/SettingsView.h"
 #include "ui/ThemeManager.h"
+#include "ui/SidebarWidget.h"
 
-#include <QSqlQuery> // Include QSqlQuery
-#include <QSqlError> // Include QSqlError
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QDebug>
-#include <QVBoxLayout> // Still needed for main window layout if any
-#include <QSettings> // For storing settings like local manga path
+#include <QVBoxLayout>
+#include <QSettings>
 #include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_sourceManager(new SourceManager(this))
-    , m_mainStack(new QStackedWidget(this)) // Main stack: Tabs, Details, Reader
+    , m_rootStack(new QStackedWidget(this)) // Root stack: Dashboard, Reader
+    , m_dashboardWidget(new QWidget(this))  // Holds Sidebar + Content Stack
+    , m_contentStack(new QStackedWidget(this)) // Content stack: Library, Updates, History, Browse, Details, Settings
     , m_jsEngine(new QJSEngine(this))
     , m_networkManager(new NetworkAccessManager(m_jsEngine, this))
 {
     // Database setup
-    m_database = DatabaseManager::instance().database();
-    if (m_database.isOpen()) {
+    if (QSqlDatabase::database().isOpen()) {
         qDebug() << "MainWindow: Database connection established.";
     } else {
         qDebug() << "MainWindow: Failed to establish database connection.";
         QMessageBox::critical(this, "Database Error", "Failed to establish database connection.");
     }
 
-    // --- Initialize Components ---
-
-    // 1. Library View
-    m_libraryView = new LibraryView(this);
-    connect(m_libraryView, &LibraryView::mangaSelected, this, &MainWindow::onMangaSelected);
-
-    // 2. Browse View (Source List + Manga List)
-    m_browseStack = new QStackedWidget(this);
-    m_sourceListView = new SourceListView(m_sourceManager, this);
-    m_mangaListView = new MangaListView(this);
-    
-    m_browseStack->addWidget(m_sourceListView);
-    m_browseStack->addWidget(m_mangaListView);
-    
-    connect(m_sourceListView, &SourceListView::sourceSelected, this, &MainWindow::onSourceSelected);
-    connect(m_mangaListView, &MangaListView::mangaSelected, this, &MainWindow::onMangaSelected);
-
-    // 3. Main Tabs (Library + Browse)
-    m_mainTabWidget = new QTabWidget(this);
-    m_mainTabWidget->addTab(m_libraryView, "Library");
-    m_mainTabWidget->addTab(m_browseStack, "Browse");
-    
-    // Refresh library when tab is selected
-    connect(m_mainTabWidget, &QTabWidget::currentChanged, this, [this](int index) {
-        if (index == 0) { // Library tab
-            m_libraryView->refreshLibrary();
-        }
-    });
-
-    // 4. Details View
-    m_mangaDetailsView = new MangaDetailsView(this);
-    connect(m_mangaDetailsView, &MangaDetailsView::chapterSelected, this, &MainWindow::onChapterSelected);
-    connect(m_mangaDetailsView, &MangaDetailsView::backRequested, this, &MainWindow::onBackRequested);
-    connect(m_mangaDetailsView, &MangaDetailsView::libraryStatusChanged, m_libraryView, &LibraryView::refreshLibrary);
-
-    // 5. Reader View
-    m_readerWidget = new ReaderWidget(this);
-    connect(m_readerWidget, &ReaderWidget::navigateBack, this, &MainWindow::onBackRequested);
-
-    // 6. Settings View
-    m_settingsView = new SettingsView(this);
-    connect(m_settingsView, &SettingsView::backRequested, this, &MainWindow::onBackRequested);
-    connect(m_settingsView, &SettingsView::readingModeChanged, this, [this](int index) {
-        // 0: Webtoon, 1: L2R, 2: R2L
-        ReaderWidget::ReadingMode mode;
-        switch (index) {
-            case 0: mode = ReaderWidget::Webtoon; break;
-            case 1: mode = ReaderWidget::LeftToRight; break;
-            case 2: mode = ReaderWidget::RightToLeft; break;
-            default: mode = ReaderWidget::Webtoon; break;
-        }
-        m_readerWidget->setReadingMode(mode);
-    });
-
-    // --- Setup Main Stack ---
-    // --- Setup Main Stack ---
-    m_mainStack->addWidget(m_mainTabWidget);      // Index 0: Tabs
-    m_mainStack->addWidget(m_mangaDetailsView);   // Index 1: Details
-    m_mainStack->addWidget(m_readerWidget);       // Index 2: Reader
-    m_mainStack->addWidget(m_settingsView);       // Index 3: Settings
-
-    setCentralWidget(m_mainStack);
-
-    // Initialize Sources
+    // --- Initialize Sources ---
     QSettings settings("MihonQT", "MihonQT");
     QString localMangaPath = settings.value("localMangaPath", "").toString();
     LocalSource *localSource = new LocalSource(localMangaPath, this);
@@ -111,10 +53,109 @@ MainWindow::MainWindow(QWidget *parent)
     );
     m_sourceManager->addSource(jsSource);
 
+    // --- Initialize Components ---
+
+    // 1. Library View
+    m_libraryView = new LibraryView(this);
+    connect(m_libraryView, &LibraryView::mangaSelected, this, &MainWindow::onMangaSelected);
+
+    // 2. Browse View (Source List + Source Browse View)
+    m_browseStack = new QStackedWidget(this);
+    m_sourceListView = new SourceListView(m_sourceManager, this);
+    m_sourceBrowseView = new SourceBrowseView(this);
+
+    m_browseStack->addWidget(m_sourceListView);
+    m_browseStack->addWidget(m_sourceBrowseView);
+
+    connect(m_sourceListView, &SourceListView::sourceSelected, this, &MainWindow::onSourceSelected);
+    connect(m_sourceBrowseView, &SourceBrowseView::mangaSelected, this, &MainWindow::onMangaSelected);
+    connect(m_sourceBrowseView, &SourceBrowseView::backRequested, this, &MainWindow::showSourceList);
+
+    // 3. New Views
+    m_updatesView = new UpdatesView(this);
+    m_historyView = new HistoryView(this);
+
+    connect(m_libraryView, &LibraryView::mangaSelected, this, &MainWindow::onMangaSelected);
+    connect(m_libraryView, &LibraryView::backRequested, this, &MainWindow::onBackRequested);
+    connect(m_updatesView, &UpdatesView::chapterSelected, this, &MainWindow::onChapterSelected);
+
+
+    m_mangaDetailsView = new MangaDetailsView(this);
+    connect(m_mangaDetailsView, &MangaDetailsView::chapterSelected, this, &MainWindow::onChapterSelected);
+    connect(m_mangaDetailsView, &MangaDetailsView::backRequested, this, &MainWindow::onBackRequested);
+    connect(m_mangaDetailsView, &MangaDetailsView::libraryStatusChanged, m_libraryView, &LibraryView::refreshLibrary);
+
+    // 5. Reader View
+    m_readerWidget = new ReaderWidget(this);
+    connect(m_readerWidget, &ReaderWidget::navigateBack, this, &MainWindow::onBackRequested);
+
+    // 6. Settings View
+    m_settingsView = new SettingsView(this);
+    connect(m_settingsView, &SettingsView::backRequested, this, &MainWindow::onBackRequested);
+connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow::onLocalMangaPathChanged);
+    connect(m_settingsView, &SettingsView::readingModeChanged, this, [this](int index) {
+        // 0: Webtoon, 1: L2R, 2: R2L
+        ReaderWidget::ReadingMode mode;
+        switch (index) {
+            case 0: mode = ReaderWidget::Webtoon; break;
+            case 1: mode = ReaderWidget::LeftToRight; break;
+            case 2: mode = ReaderWidget::RightToLeft; break;
+            default: mode = ReaderWidget::Webtoon; break;
+        }
+        m_readerWidget->setReadingMode(mode);
+    });
+
+    // --- Setup Sidebar Navigation ---
+    m_sidebar = new SidebarWidget(this);
+    connect(m_sidebar, &SidebarWidget::navigationRequested, this, &MainWindow::onNavigationRequested);
+
+    // --- Setup Layout Structure ---
+
+    // Content Stack (Right side)
+    // Indexes:
+    // 0: Library
+    // 1: Updates
+    // 2: History
+    // 3: Browse
+    // 4: Settings
+    // 5: Details (Manga Details)
+
+    m_contentStack->addWidget(m_libraryView);       // 0
+    m_contentStack->addWidget(m_updatesView);       // 1
+    m_contentStack->addWidget(m_historyView);       // 2
+    m_contentStack->addWidget(m_browseStack);       // 3 (Browse acts as container for Source List/Manga List)
+    m_contentStack->addWidget(m_settingsView);      // 4
+    m_contentStack->addWidget(m_mangaDetailsView);  // 5
+
+    // Dashboard Layout (Sidebar + Content)
+    QHBoxLayout *dashboardLayout = new QHBoxLayout(m_dashboardWidget);
+    dashboardLayout->setContentsMargins(0, 0, 0, 0);
+    dashboardLayout->setSpacing(0);
+    dashboardLayout->addWidget(m_sidebar);
+
+    // Add a separator line if desired (optional)
+    QFrame *line = new QFrame();
+    line->setFrameShape(QFrame::VLine);
+    line->setFrameShadow(QFrame::Sunken);
+    // dashboardLayout->addWidget(line);
+
+    dashboardLayout->addWidget(m_contentStack, 1); // Content takes available space
+
+    // Root Stack (Dashboard + Reader)
+    m_rootStack->addWidget(m_dashboardWidget); // Index 0
+    m_rootStack->addWidget(m_readerWidget);    // Index 1
+
+    setCentralWidget(m_rootStack);
+
     setupUi();
-    
+
+    if (menuBar()) {
+        menuBar()->hide();
+    }
+
     // Initial refresh
     m_libraryView->refreshLibrary();
+    // Sources already populated via constructor now
 }
 
 MainWindow::~MainWindow()
@@ -134,34 +175,39 @@ void MainWindow::setupUi()
     // --- Toolbar & Hamburger Menu ---
     m_toolBar = addToolBar("Main Toolbar");
     m_toolBar->setMovable(false);
-    
+
     // Hamburger Action (Icon would be better, using text for now)
-    m_hamburgerAction = new QAction("Menu", this); 
+    m_hamburgerAction = new QAction("Menu", this);
     // m_hamburgerAction->setIcon(QIcon(":/icons/menu.png")); // TODO: Add icon
     m_toolBar->addAction(m_hamburgerAction);
 
     // Spacer to push other items to right if needed
-    QWidget* spacer = new QWidget();
-    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    m_toolBar->addWidget(spacer);
+    // QWidget* spacer = new QWidget();
+    // spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    // m_toolBar->addWidget(spacer);
+
+    // Only show toolbar if needed, or customize per view.
+    // Ideally, for desktop, we might not need a top toolbar if we have a sidebar.
+    // Or we keep it for global actions.
+    m_toolBar->hide(); // Hiding for now to clean up UI, can re-enable if we want Breadcrumbs or Search
 
     // Hamburger Menu
     m_hamburgerMenu = new QMenu(this);
-    
+
     // 1. Toggles
     m_downloadedOnlyAction = m_hamburgerMenu->addAction("Downloaded only");
     m_downloadedOnlyAction->setCheckable(true);
-    
+
     m_incognitoModeAction = m_hamburgerMenu->addAction("Incognito mode");
     m_incognitoModeAction->setCheckable(true);
-    
+
     m_hamburgerMenu->addSeparator();
 
     // 2. Shortcuts
     m_downloadQueueAction = m_hamburgerMenu->addAction("Download queue");
     m_categoriesAction = m_hamburgerMenu->addAction("Categories");
     m_statsAction = m_hamburgerMenu->addAction("Statistics");
-    
+
     m_hamburgerMenu->addSeparator();
 
     // 3. Settings & About
@@ -190,7 +236,7 @@ void MainWindow::setupUi()
         QMessageBox::information(nullptr, "Info", "Statistics not implemented yet.");
     });
     connect(m_settingsAction, &QAction::triggered, this, [this]() {
-        m_mainStack->setCurrentWidget(m_settingsView);
+        onNavigationRequested(4); // Navigate to Settings
     });
     connect(m_aboutAction, &QAction::triggered, this, [this]() {
         QMessageBox::about(this, "About MihonQT", "MihonQT v0.1\nA Qt port of the Mihon manga reader.");
@@ -255,8 +301,8 @@ void MainWindow::onMangaSelected(const Manga& manga)
 {
     qDebug() << "Manga selected:" << manga.title();
 
-    MangaRepository mangaRepo(m_database);
-    ChapterRepository chapterRepo(m_database);
+    MangaRepository& mangaRepo = DatabaseManager::instance().mangaRepository();
+    ChapterRepository& chapterRepo = DatabaseManager::instance().chapterRepository();
     SourceBase* source = m_sourceManager->getSourceById(manga.source());
 
     if (!source) {
@@ -306,14 +352,43 @@ void MainWindow::onMangaSelected(const Manga& manga)
             return;
         }
     } else {
-        qDebug() << "Manga already in library with ID:" << mangaIdToOpen;
-        // Optionally, we can update chapters here as well (a "sync" operation)
+        qDebug() << "Manga already in DB with ID:" << mangaIdToOpen;
+
+        // Sync chapters anyway to catch new local files/updates
+        QList<SChapter> sChapters = source->getChapterList(dbManga);
+        QList<Chapter> existingChapters = chapterRepo.getChaptersByMangaId(mangaIdToOpen);
+
+        // Simple sync: add only those that don't exist by URL
+        for (const SChapter& sChap : sChapters) {
+            bool exists = false;
+            for (const Chapter& existing : existingChapters) {
+                if (existing.url() == sChap.url()) {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                Chapter chapter(
+                    -1, mangaIdToOpen, sChap.url(), sChap.name(), sChap.scanlator(),
+                    false, false, 0, sChap.chapterNumber(),
+                    existingChapters.size(), // Use current size as order
+                    QDateTime::currentSecsSinceEpoch(), sChap.dateUpload(),
+                    QDateTime::currentSecsSinceEpoch()
+                );
+                chapterRepo.insertChapter(chapter);
+            }
+        }
     }
 
     if (mangaIdToOpen != -1) {
         // Re-fetch fresh manga object from DB to ensure we have ID and latest state
         Manga finalManga = mangaRepo.getMangaById(mangaIdToOpen);
         showMangaDetails(finalManga);
+
+        // Refresh library in case it was added (even if not favorited yet,
+        // though LibraryView filters by favorites, it's good practice)
+        m_libraryView->refreshLibrary();
     }
 }
 
@@ -322,48 +397,86 @@ void MainWindow::onChapterSelected(const Manga& manga, const Chapter& chapter)
     showReader(manga.id(), chapter.id());
 }
 
+void MainWindow::onNavigationRequested(int index)
+{
+    // Indexes:
+    // 0: Library
+    // 1: Updates
+    // 2: History
+    // 3: Browse
+    // 4: Settings
+
+    int stackIndex = -1;
+    switch (index) {
+        case 0: stackIndex = 0; break; // Library
+        case 1: stackIndex = 1; break; // Updates
+        case 2: stackIndex = 2; break; // History
+        case 3: stackIndex = 3; break; // Browse
+        case 4: stackIndex = 4; break; // Settings
+    }
+
+    if (stackIndex != -1) {
+        if (stackIndex == 0) {
+            m_libraryView->refreshLibrary();
+        }
+
+        // Don't track Details (5) as a "base" navigation point
+        if (m_contentStack->currentIndex() != 5) {
+            m_lastContentIndex = m_contentStack->currentIndex();
+        }
+
+        m_contentStack->setCurrentIndex(stackIndex);
+    }
+}
+
 void MainWindow::onBackRequested()
 {
-    if (m_mainStack->currentWidget() == m_readerWidget) {
-        // Back from Reader -> Details
-        m_mainStack->setCurrentWidget(m_mangaDetailsView);
-        // Refresh details in case chapter progress changed
-        // m_mangaDetailsView->refreshChapters(); 
-    } else if (m_mainStack->currentWidget() == m_mangaDetailsView) {
-        // Back from Details -> Tabs
-        m_mainStack->setCurrentWidget(m_mainTabWidget);
-    } else if (m_mainStack->currentWidget() == m_settingsView) {
-        // Back from Settings -> Tabs (or previous view, but Tabs is safe default)
-        m_mainStack->setCurrentWidget(m_mainTabWidget);
-    } else if (m_mainStack->currentWidget() == m_mainTabWidget) {
-        // Inside Tabs: Handle Browse Stack back navigation
-        if (m_mainTabWidget->currentWidget() == m_browseStack) {
-            if (m_browseStack->currentWidget() == m_mangaListView) {
+    if (m_rootStack->currentWidget() == m_readerWidget) {
+        // Back from Reader -> Dashboard (shows last content)
+        m_rootStack->setCurrentWidget(m_dashboardWidget);
+    } else {
+        // We are in Dashboard. Check Content Stack.
+        QWidget* currentContent = m_contentStack->currentWidget();
+
+        if (currentContent == m_mangaDetailsView) {
+            // Back from Details -> where we came from (Library or Browse)
+            m_contentStack->setCurrentIndex(m_lastContentIndex);
+        } else if (currentContent == m_browseStack) {
+            // Inside Browse: Handle Browse Stack back navigation
+            if (m_browseStack->currentWidget() == m_sourceBrowseView) {
                 showSourceList();
+            } else {
+                // If at root of browse (Source List), maybe go to Library?
+                // Standard Android behavior: Back at root tab -> Exit app (or go to default tab)
+                // For Desktop, maybe do nothing.
             }
         }
+        // Else: Updates, History, Settings, Library -> Do nothing (or exit app logic)
     }
 }
 
 void MainWindow::showMangaDetails(const Manga& manga)
 {
+    if (m_contentStack->currentIndex() != 5) {
+        m_lastContentIndex = m_contentStack->currentIndex();
+    }
     m_mangaDetailsView->setManga(manga);
-    m_mainStack->setCurrentWidget(m_mangaDetailsView);
+    m_contentStack->setCurrentWidget(m_mangaDetailsView);
 }
 
 void MainWindow::showSourceList()
 {
+    m_sourceListView->refreshSources();
     m_browseStack->setCurrentWidget(m_sourceListView);
-    // setWindowTitle("MihonQT - Sources"); // Title managed by tabs now?
 }
 
 void MainWindow::showMangaList(long sourceId)
 {
+    m_currentSourceId = sourceId; // Store current source
     SourceBase* source = m_sourceManager->getSourceById(sourceId);
     if (source) {
-        m_mangaListView->populateManga(source->getPopularManga()); // For now, show popular manga
-        // setWindowTitle("MihonQT - " + source->name());
-        m_browseStack->setCurrentWidget(m_mangaListView);
+        m_sourceBrowseView->setSource(source);
+        m_browseStack->setCurrentWidget(m_sourceBrowseView);
     } else {
         qWarning() << "Source with ID" << sourceId << "not found.";
         showSourceList(); // Fallback to source list
@@ -372,6 +485,22 @@ void MainWindow::showMangaList(long sourceId)
 
 void MainWindow::showReader(long mangaId, long chapterId)
 {
-    m_mainStack->setCurrentWidget(m_readerWidget);
+    m_rootStack->setCurrentWidget(m_readerWidget);
     m_readerWidget->loadChapter(mangaId, chapterId);
 }
+void MainWindow::onLocalMangaPathChanged(const QString& newPath)
+{
+    qDebug() << "Local manga path changed to:" << newPath;
+    SourceBase* source = m_sourceManager->getSourceById(LocalSource::ID);
+    if (source) {
+        LocalSource* localSource = static_cast<LocalSource*>(source);
+        localSource->setBaseDirectory(newPath);
+        m_libraryView->refreshLibrary();
+
+        // Use m_currentSourceId to check if we should refresh the browse view
+        if (m_currentSourceId == LocalSource::ID) {
+             showMangaList(LocalSource::ID);
+        }
+    }
+}
+

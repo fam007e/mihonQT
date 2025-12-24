@@ -5,14 +5,13 @@
 #include <QDebug>
 #include <QVariant>
 
-MangaRepository::MangaRepository(QSqlDatabase& db)
-    : m_db(db)
+MangaRepository::MangaRepository()
 {
 }
 
 bool MangaRepository::insertManga(const Manga& manga)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query; // Uses default connection
     query.prepare("INSERT INTO mangas ("
                   "source, url, artist, author, description, genre, title, status, thumbnail_url, favorite, "
                   "last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, "
@@ -57,7 +56,7 @@ bool MangaRepository::insertManga(const Manga& manga)
 
 bool MangaRepository::updateManga(const Manga& manga)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("UPDATE mangas SET "
                   "source = :source, url = :url, artist = :artist, author = :author, "
                   "description = :description, genre = :genre, title = :title, status = :status, "
@@ -104,7 +103,7 @@ bool MangaRepository::updateManga(const Manga& manga)
 
 Manga MangaRepository::getMangaById(long id)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("SELECT * FROM mangas WHERE _id = :id");
     query.bindValue(":id", static_cast<qlonglong>(id));
     if (query.exec() && query.next()) {
@@ -117,7 +116,7 @@ Manga MangaRepository::getMangaById(long id)
 QList<Manga> MangaRepository::getAllManga()
 {
     QList<Manga> mangas;
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("SELECT * FROM mangas");
     if (query.exec()) {
         while (query.next()) {
@@ -132,7 +131,7 @@ QList<Manga> MangaRepository::getAllManga()
 QList<Manga> MangaRepository::getFavorites()
 {
     QList<Manga> mangas;
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("SELECT * FROM mangas WHERE favorite = 1");
     if (query.exec()) {
         while (query.next()) {
@@ -146,7 +145,7 @@ QList<Manga> MangaRepository::getFavorites()
 
 bool MangaRepository::deleteManga(long id)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("DELETE FROM mangas WHERE _id = :id");
     query.bindValue(":id", static_cast<qlonglong>(id));
     if (!query.exec()) {
@@ -158,7 +157,7 @@ bool MangaRepository::deleteManga(long id)
 
 Manga MangaRepository::getMangaByUrl(const QString& url, long sourceId)
 {
-    QSqlQuery query(m_db);
+    QSqlQuery query;
     query.prepare("SELECT * FROM mangas WHERE url = :url AND source = :source_id");
     query.bindValue(":url", url);
     query.bindValue(":source_id", static_cast<qlonglong>(sourceId));

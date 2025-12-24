@@ -2,11 +2,12 @@
 #define MANGALISTVIEW_H
 
 #include <QWidget>
-#include <QListWidget>
+#include <QGridLayout>
+#include <QScrollArea>
 #include <QList>
-#include "model/Manga.h" // Include Manga header
+#include "model/Manga.h"
 
-class SourceBase; // Forward declaration
+class MangaCoverCard;
 
 class MangaListView : public QWidget
 {
@@ -17,12 +18,22 @@ public:
     void populateManga(const QList<Manga>& mangaList);
 
 signals:
-    void mangaSelected(const Manga& manga); // Changed signal
+    void mangaSelected(const Manga& manga);
+    void backRequested();
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
 
 private:
     void setupUi();
-    QListWidget *m_mangaListWidget;
-    QList<Manga> m_mangaList; // Member to store the current manga list
+    void updateGridLayout();
+
+    QScrollArea *m_scrollArea;
+    QWidget *m_contentWidget;
+    QGridLayout *m_gridLayout;
+    QList<MangaCoverCard*> m_cards;
+    QList<Manga> m_mangaList;
 };
 
 #endif // MANGALISTVIEW_H

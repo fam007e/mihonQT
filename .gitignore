@@ -6,7 +6,7 @@ CMakeFiles/
 CMakeScripts/
 Testing/
 **/build/
-**/CMake*
+
 
 # Qt
 *.pro.user

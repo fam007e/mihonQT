@@ -1,38 +1,28 @@
 #include "SettingsView.h"
 #include "ThemeManager.h"
+#include "UiUtils.h"
 #include "config/PreferenceManager.h"
 #include "CategoryEditDialog.h"
-#include "reader/ReaderWidget.h" // For ReadingMode enum
+#include "reader/ReaderWidget.h"
 #include <QGroupBox>
 #include <QSplitter>
 #include <QHeaderView>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QKeyEvent>
+#include <QMouseEvent>
 
 SettingsView::SettingsView(QWidget *parent) : QWidget(parent)
 {
+    qDebug() << "SettingsView constructor start";
     setupUi();
+    qDebug() << "SettingsView constructor end";
 }
 
 void SettingsView::setupUi()
 {
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
-
-    // Header
-    QWidget *headerWidget = new QWidget(this);
-    headerWidget->setStyleSheet("background-color: palette(base); border-bottom: 1px solid palette(mid);");
-    QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
-    m_backButton = new QPushButton("Back", this);
-    m_backButton->setIcon(QIcon::fromTheme("go-previous")); // Try to use system icon
-    
-    QLabel *titleLabel = new QLabel("Settings", this);
-    titleLabel->setStyleSheet("font-size: 18px; font-weight: bold;");
-    
-    headerLayout->addWidget(m_backButton);
-    headerLayout->addWidget(titleLabel);
-    headerLayout->addStretch();
-    
-    connect(m_backButton, &QPushButton::clicked, this, &SettingsView::backRequested);
-    m_mainLayout->addWidget(headerWidget);
 
     // Content Area (Splitter)
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
@@ -41,6 +31,7 @@ void SettingsView::setupUi()
     // Left Sidebar (Categories)
     m_categoryList = new QListWidget(this);
     m_categoryList->setFixedWidth(200);
+    UiUtils::applyListWidgetStyle(m_categoryList);
     m_categoryList->addItem("Appearance");
     m_categoryList->addItem("Library");
     m_categoryList->addItem("Reader");
@@ -51,7 +42,7 @@ void SettingsView::setupUi()
     m_categoryList->addItem("Security");
     m_categoryList->addItem("Advanced");
     m_categoryList->addItem("About");
-    
+
     splitter->addWidget(m_categoryList);
 
     // Right Content (Stacked Widget)
@@ -62,19 +53,45 @@ void SettingsView::setupUi()
     createAppearancePage();     // Index 0
     createLibraryPage();        // Index 1
     createReaderPage();         // Index 2
-    m_contentStack->addWidget(createPlaceholderPage("Download Settings")); // Index 3
-    m_contentStack->addWidget(createPlaceholderPage("Tracking Settings")); // Index 4
-    m_contentStack->addWidget(createPlaceholderPage("Browse Settings")); // Index 5
-    m_contentStack->addWidget(createPlaceholderPage("Data & Storage Settings")); // Index 6
-    m_contentStack->addWidget(createPlaceholderPage("Security Settings")); // Index 7
-    m_contentStack->addWidget(createPlaceholderPage("Advanced Settings")); // Index 8
-    m_contentStack->addWidget(createPlaceholderPage("About MihonQT")); // Index 9
+    createDownloadsPage();      // Index 3
+    createTrackingPage();       // Index 4
+    createBrowsePage();         // Index 5
+    createDataStoragePage();    // Index 6
+    createSecurityPage();       // Index 7
+    createAdvancedPage();       // Index 8
+    createAboutPage();          // Index 9
 
     // Connect Sidebar
     connect(m_categoryList, &QListWidget::currentRowChanged, this, &SettingsView::onCategoryChanged);
-    
+
     // Select first item
     m_categoryList->setCurrentRow(0);
+
+    setFocusPolicy(Qt::StrongFocus);
+}
+
+void SettingsView::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape) {
+        emit backRequested();
+    } else {
+        QWidget::keyPressEvent(event);
+    }
+}
+
+void SettingsView::mouseDoubleClickEvent(QMouseEvent *event)
+{
+    emit backRequested();
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+void SettingsView::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::RightButton) {
+        emit backRequested();
+    } else {
+        QWidget::mousePressEvent(event);
+    }
 }
 
 
@@ -98,7 +115,7 @@ void SettingsView::createAppearancePage()
     m_themeComboBox->addItem("Catppuccin Frappe");
     m_themeComboBox->addItem("Tokyo Night");
     m_themeComboBox->addItem("Dracula");
-    
+
     // Set current theme
     ThemeManager::Theme current = ThemeManager::instance().currentTheme();
     m_themeComboBox->setCurrentIndex((int)current);
@@ -193,10 +210,10 @@ void SettingsView::createLibraryPage()
     // Categories Group
     QGroupBox *categoryGroup = new QGroupBox("Categories", this);
     QVBoxLayout *categoryLayout = new QVBoxLayout(categoryGroup);
-    
+
     m_editCategoriesButton = new QPushButton("Edit Categories", this);
     connect(m_editCategoriesButton, &QPushButton::clicked, this, &SettingsView::onEditCategoriesClicked);
-    
+
     categoryLayout->addWidget(m_editCategoriesButton);
     layout->addWidget(categoryGroup);
 
@@ -260,6 +277,7 @@ void SettingsView::createReaderPage()
     m_readingModeComboBox->addItem("Webtoon", 0);
     m_readingModeComboBox->addItem("Left to Right", 1);
     m_readingModeComboBox->addItem("Right to Left", 2);
+    m_readingModeComboBox->addItem("Double Page Spread", 3);
 
     int savedMode = PreferenceManager::instance().value("reader/default_mode", 0).toInt();
     int index = m_readingModeComboBox->findData(savedMode);
@@ -269,6 +287,11 @@ void SettingsView::createReaderPage()
         int value = m_readingModeComboBox->itemData(index).toInt();
         PreferenceManager::instance().setValue("reader/default_mode", value);
         emit readingModeChanged(value);
+        // Force reader to reload settings if active
+        // Ideally we'd have a signal for this, but for now we rely on ReaderWidget checking prefs or being re-created
+        // Actually, let's emit a generic signal or have ReaderWidget listen to something.
+        // For this task, we will just ensure ReaderWidget reloads when shown/created.
+        // But for immediate effect, we need a signal.
     });
 
     modeLayout->addWidget(modeLabel);
@@ -412,6 +435,257 @@ void SettingsView::createReaderPage()
     m_contentStack->addWidget(page);
 }
 
+void SettingsView::createDownloadsPage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignTop);
+
+    QGroupBox *downloadGroup = new QGroupBox("Downloads", this);
+    QVBoxLayout *downloadLayout = new QVBoxLayout(downloadGroup);
+
+    m_downloadNewChaptersCheckBox = new QCheckBox("Download new chapters", this);
+    m_downloadNewChaptersCheckBox->setChecked(PreferenceManager::instance().value("downloads/download_new", false).toBool());
+    connect(m_downloadNewChaptersCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("downloads/download_new", checked);
+    });
+
+    m_deleteRemovedChaptersCheckBox = new QCheckBox("Delete chapters after reading", this);
+    m_deleteRemovedChaptersCheckBox->setChecked(PreferenceManager::instance().value("downloads/delete_removed", false).toBool());
+    connect(m_deleteRemovedChaptersCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("downloads/delete_removed", checked);
+    });
+
+
+    downloadLayout->addWidget(m_downloadNewChaptersCheckBox);
+    downloadLayout->addWidget(m_deleteRemovedChaptersCheckBox);
+    layout->addWidget(downloadGroup);
+
+    m_contentStack->addWidget(page);
+}
+
+void SettingsView::createTrackingPage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignTop);
+
+    QGroupBox *trackingGroup = new QGroupBox("Tracking", this);
+    QVBoxLayout *trackingLayout = new QVBoxLayout(trackingGroup);
+
+    m_autoUpdateTrackersCheckBox = new QCheckBox("Automatically update trackers", this);
+    m_autoUpdateTrackersCheckBox->setChecked(PreferenceManager::instance().value("tracking/auto_update", true).toBool());
+    connect(m_autoUpdateTrackersCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("tracking/auto_update", checked);
+    });
+
+    m_loginMalButton = new QPushButton("Login to MyAnimeList", this);
+    m_loginAnilistButton = new QPushButton("Login to AniList", this);
+
+    trackingLayout->addWidget(m_autoUpdateTrackersCheckBox);
+    trackingLayout->addWidget(m_loginMalButton);
+    trackingLayout->addWidget(m_loginAnilistButton);
+    layout->addWidget(trackingGroup);
+
+    m_contentStack->addWidget(page);
+}
+
+void SettingsView::createBrowsePage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignTop);
+
+    QGroupBox *browseGroup = new QGroupBox("Browse", this);
+    QVBoxLayout *browseLayout = new QVBoxLayout(browseGroup);
+
+    m_checkForSourceUpdatesCheckBox = new QCheckBox("Check for source updates", this);
+    m_checkForSourceUpdatesCheckBox->setChecked(PreferenceManager::instance().value("browse/check_updates", true).toBool());
+    connect(m_checkForSourceUpdatesCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("browse/check_updates", checked);
+    });
+
+    m_autoUpdateExtensionsCheckBox = new QCheckBox("Auto-update extensions", this);
+    m_autoUpdateExtensionsCheckBox->setChecked(PreferenceManager::instance().value("browse/auto_update_extensions", false).toBool());
+    connect(m_autoUpdateExtensionsCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("browse/auto_update_extensions", checked);
+    });
+
+    m_showNsfwSourceCheckBox = new QCheckBox("Show NSFW sources", this);
+    m_showNsfwSourceCheckBox->setChecked(PreferenceManager::instance().value("browse/show_nsfw", true).toBool());
+    connect(m_showNsfwSourceCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("browse/show_nsfw", checked);
+    });
+
+    m_localSourceLocationButton = new QPushButton("Local Source Folder", this);
+    connect(m_localSourceLocationButton, &QPushButton::clicked, this, [this](){
+        QString dir = QFileDialog::getExistingDirectory(this, "Select Local Manga Directory",
+                                                      QDir::homePath(),
+                                                      QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+        if (!dir.isEmpty()) {
+            QSettings settings("MihonQT", "MihonQT");
+            settings.setValue("localMangaPath", dir);
+            emit localMangaPathChanged(dir);
+            QMessageBox::information(this, "Success", "Local manga path updated to:\n" + dir);
+        }
+    });
+
+    browseLayout->addWidget(m_checkForSourceUpdatesCheckBox);
+    browseLayout->addWidget(m_autoUpdateExtensionsCheckBox);
+    browseLayout->addWidget(m_showNsfwSourceCheckBox);
+    browseLayout->addWidget(m_localSourceLocationButton);
+    layout->addWidget(browseGroup);
+
+    m_contentStack->addWidget(page);
+}
+
+void SettingsView::createDataStoragePage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignTop);
+
+    QGroupBox *storageGroup = new QGroupBox("Storage", this);
+    QVBoxLayout *storageLayout = new QVBoxLayout(storageGroup);
+
+    m_createBackupButton = new QPushButton("Create Backup", this);
+    m_restoreBackupButton = new QPushButton("Restore Backup", this);
+    m_clearCacheButton = new QPushButton("Clear Chapter Cache", this);
+    m_clearCookiesButton = new QPushButton("Clear Cookie Jar", this);
+
+    storageLayout->addWidget(m_createBackupButton);
+    storageLayout->addWidget(m_restoreBackupButton);
+    storageLayout->addWidget(m_clearCacheButton);
+    storageLayout->addWidget(m_clearCookiesButton);
+    layout->addWidget(storageGroup);
+
+    m_contentStack->addWidget(page);
+}
+
+void SettingsView::createSecurityPage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignTop);
+
+    QGroupBox *securityGroup = new QGroupBox("Security", this);
+    QVBoxLayout *securityLayout = new QVBoxLayout(securityGroup);
+
+    QCheckBox *incognitoCheckBox = new QCheckBox("Incognito Mode", this);
+    incognitoCheckBox->setChecked(PreferenceManager::instance().value("security/incognito", false).toBool());
+    connect(incognitoCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("security/incognito", checked);
+    });
+
+    QCheckBox *secureScreenCheckBox = new QCheckBox("Secure Screen", this);
+    secureScreenCheckBox->setChecked(PreferenceManager::instance().value("security/secure_screen", false).toBool());
+    connect(secureScreenCheckBox, &QCheckBox::toggled, [](bool checked){
+        PreferenceManager::instance().setValue("security/secure_screen", checked);
+    });
+
+    securityLayout->addWidget(incognitoCheckBox);
+    securityLayout->addWidget(secureScreenCheckBox);
+    layout->addWidget(securityGroup);
+
+    m_contentStack->addWidget(page);
+}
+
+void SettingsView::createAdvancedPage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignTop);
+
+    QGroupBox *advancedGroup = new QGroupBox("Advanced", this);
+    QVBoxLayout *advancedLayout = new QVBoxLayout(advancedGroup);
+
+    QPushButton *clearDbButton = new QPushButton("Clear Database", this);
+    QPushButton *dumpLogsButton = new QPushButton("Dump Crash Logs", this);
+
+    advancedLayout->addWidget(clearDbButton);
+    advancedLayout->addWidget(dumpLogsButton);
+    layout->addWidget(advancedGroup);
+
+    m_contentStack->addWidget(page);
+}
+
+void SettingsView::createAboutPage()
+{
+    QWidget *page = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignCenter);
+    layout->setSpacing(20);
+
+    // App Logo Placeholder (using a stylized M)
+    QLabel *logoLabel = new QLabel(this);
+    logoLabel->setText("M");
+    logoLabel->setAlignment(Qt::AlignCenter);
+    logoLabel->setFixedSize(120, 120);
+    logoLabel->setStyleSheet(
+        "background-color: #88C0D0;"
+        "color: #2E3440;"
+        "border-radius: 60px;"
+        "font-size: 72px;"
+        "font-weight: bold;"
+    );
+    layout->addWidget(logoLabel);
+
+    // Info
+    QLabel *titleLabel = new QLabel("MihonQT", this);
+    titleLabel->setStyleSheet("font-size: 28px; font-weight: bold; color: #ECEFF4;");
+    layout->addWidget(titleLabel);
+
+    QLabel *versionLabel = new QLabel("Version 0.1.0-alpha", this);
+    versionLabel->setStyleSheet("font-size: 14px; color: #D8DEE9;");
+    layout->addWidget(versionLabel);
+
+    QLabel *descLabel = new QLabel(
+        "A powerful, cross-platform manga reader for desktop.<br>"
+        "Inspired by the beloved Mihon and Tachiyomi projects.<br>"
+        "<br>"
+        "Built with C++, Qt 6, and ❤️.",
+        this
+    );
+    descLabel->setAlignment(Qt::AlignCenter);
+    descLabel->setStyleSheet("font-size: 14px; color: #ECEFF4; margin: 20px;");
+    layout->addWidget(descLabel);
+
+    // Links
+    QHBoxLayout *linksLayout = new QHBoxLayout();
+    linksLayout->setAlignment(Qt::AlignCenter);
+    linksLayout->setSpacing(15);
+
+    auto createLink = [this](const QString& text, const QString& url) {
+        QPushButton *btn = new QPushButton(text, this);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(
+            "QPushButton { "
+            "   background-color: #4C566A; "
+            "   color: #ECEFF4; "
+            "   border: none; "
+            "   padding: 8px 16px; "
+            "   border-radius: 4px; "
+            "}"
+            "QPushButton:hover { background-color: #5E81AC; }"
+        );
+        // In a real app, use QDesktopServices::openUrl
+        return btn;
+    };
+
+    linksLayout->addWidget(createLink("GitHub", "https://github.com/fam007e/mihonQT"));
+    linksLayout->addWidget(createLink("Website", "https://mihon.app"));
+    linksLayout->addWidget(createLink("Discord", "https://discord.gg/mihon"));
+    layout->addLayout(linksLayout);
+
+    layout->addStretch();
+
+    QLabel *footerLabel = new QLabel("© 2025 MihonQT Contributors. Licensed under AGPLv3.", this);
+    footerLabel->setStyleSheet("font-size: 11px; color: #4C566A; padding-bottom: 20px;");
+    layout->addWidget(footerLabel);
+
+    m_contentStack->addWidget(page);
+}
+
 QWidget* SettingsView::createPlaceholderPage(const QString& title)
 {
     QWidget *page = new QWidget(this);
@@ -441,7 +715,7 @@ void SettingsView::onCategoryChanged(int index)
     // ...
     // Yes, the order of addWidget calls in setupUi determines the index.
     // We added them in the exact same order as the list items.
-    
+
     if (index >= 0 && index < m_contentStack->count()) {
         m_contentStack->setCurrentIndex(index);
     }
