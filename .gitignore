@@ -4,6 +4,11 @@ CMakeCache.txt
 CMakeLists.txt.user
 CMakeFiles/
 CMakeScripts/
+Makefile
+MihonQT
+*_autogen/
+*.cmake
+CMakeScripts/
 Testing/
 **/build/
 
@@ -49,3 +54,7 @@ ui_*.h
 
 # Linux
 *.so
+
+# Dev artifacts
+extensions/
+work/
