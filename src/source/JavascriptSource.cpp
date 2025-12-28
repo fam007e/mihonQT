@@ -6,6 +6,27 @@
 #include <QTextStream>
 #include <QDebug>
 #include <QJSValueIterator>
+#include "HtmlParser.h"
+
+
+// Helper class for console logging
+class ConsoleWrapper : public QObject
+{
+    Q_OBJECT
+public:
+    explicit ConsoleWrapper(QObject *parent = nullptr) : QObject(parent) {}
+
+    Q_INVOKABLE void log(const QString& msg) {
+        qDebug() << "JS Console:" << msg;
+    }
+    // Overload for multiple arguments if needed, or handle simpler
+    // Using QJSValue for flexible arguments
+    Q_INVOKABLE void log(const QJSValue& val) {
+         qDebug() << "JS Console:" << val.toString();
+    }
+};
+
+#include "JavascriptSource.moc" // Needed if we define QObject in cpp
 
 JavascriptSource::JavascriptSource(const QString& scriptPath, QJSEngine* engine, NetworkAccessManager* networkManager, QObject *parent)
     : SourceBase(parent)
@@ -16,7 +37,19 @@ JavascriptSource::JavascriptSource(const QString& scriptPath, QJSEngine* engine,
     QJSValue networkAccessManagerWrapper = m_engine->newQObject(networkManager);
     m_engine->globalObject().setProperty("Network", networkAccessManagerWrapper);
 
+    // Expose the HtmlParser
+    HtmlParser *htmlParser = new HtmlParser(this);
+    QJSValue htmlWrapper = m_engine->newQObject(htmlParser);
+    m_engine->globalObject().setProperty("Html", htmlWrapper);
+
+    // Expose console.log
+    ConsoleWrapper *consoleWrapper = new ConsoleWrapper(this);
+    QJSValue consoleObj = m_engine->newQObject(consoleWrapper);
+    m_engine->globalObject().setProperty("console", consoleObj);
+
+
     initScript();
+
 }
 
 JavascriptSource::~JavascriptSource()
@@ -75,7 +108,7 @@ QJSValue JavascriptSource::callJsFunction(const QString& functionName, const QJS
         return m_engine->newErrorObject(QJSValue::GenericError, "JavaScript function not found or not callable.");
     }
 
-    QJSValue result = function.call(args);
+    QJSValue result = function.callWithInstance(m_scriptObject, args);
     if (result.isError()) {
         qCritical() << "JavaScript function '" << functionName << "' failed:" << result.toString()
                     << "at line" << result.property("lineNumber").toInt();
@@ -98,6 +131,14 @@ long JavascriptSource::id() const
 QString JavascriptSource::lang() const
 {
     QJSValue value = m_scriptObject.property("lang");
+    return value.toString();
+}
+
+
+
+QString JavascriptSource::baseUrl() const
+{
+    QJSValue value = m_scriptObject.property("baseUrl");
     return value.toString();
 }
 
@@ -269,4 +310,29 @@ QList<SChapter> JavascriptSource::getChapterList(const Manga& manga)
         }
     }
     return chapterList;
+}
+
+QList<QString> JavascriptSource::getPageList(const Chapter& chapter)
+{
+    QList<QString> pageList;
+    // Pass chapter details to JS
+    QJSValueList args;
+    args << QJSValue(static_cast<double>(chapter.id())) << QJSValue(chapter.url());
+
+    QJSValue jsResult = callJsFunction("getPageList", args);
+    if (jsResult.isArray()) {
+        QJSValueIterator it(jsResult);
+        while (it.hasNext()) {
+            it.next();
+            QJSValue jsPage = it.value();
+            if (jsPage.isObject()) {
+                // Expecting { index: 0, url: "..." }
+                // We just need the URL for now
+                pageList.append(jsPage.property("url").toString());
+            } else if (jsPage.isString()) {
+                pageList.append(jsPage.toString());
+            }
+        }
+    }
+    return pageList;
 }

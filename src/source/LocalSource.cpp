@@ -37,6 +37,11 @@ QString LocalSource::lang() const
     return LANG;
 }
 
+QString LocalSource::baseUrl() const
+{
+    return ""; // Local source has no base URL (or could be "local")
+}
+
 bool LocalSource::supportsLatest() const
 {
     return true; // Local files can be sorted by last modified date
@@ -347,4 +352,16 @@ QList<SChapter> LocalSource::getChapterList(const Manga& manga)
 
     qDebug() << "LocalSource::getChapterList returning" << chapters.size() << "chapters.";
     return chapters;
+}
+
+QList<QString> LocalSource::getPageList(const Chapter& chapter)
+{
+    // For LocalSource, the ReaderWidget handles page loading logic directly via directory listing or CBZ.
+    // However, to satisfy the interface, we can return the list of file paths here if we wanted to move logic.
+    // For now, ReaderWidget logic for LocalSource takes precedence if we don't modify it to use this.
+    // ReaderWidget::loadAndDisplayPages calls this ONLY if it's an online chapter (starts with http).
+    // LocalSource chapters usually have file paths or cbz:// paths.
+    // So this might not be called by the current ReaderWidget logic for LocalSource.
+    // But returning empty list is fine for now, or we can implement the file listing here.
+    return QList<QString>();
 }

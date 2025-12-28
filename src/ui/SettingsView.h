@@ -11,6 +11,7 @@
 #include <QCheckBox>
 #include <QListWidget>
 #include <QStackedWidget>
+#include <QLineEdit>
 
 class SettingsView : public QWidget
 {
@@ -22,6 +23,9 @@ signals:
     void backRequested();
     void readingModeChanged(int mode);
     void localMangaPathChanged(const QString& newPath);
+    void dataDirectoryChanged(const QString& newPath);
+
+
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -105,6 +109,9 @@ private:
     QPushButton *m_restoreBackupButton;
     QPushButton *m_clearCacheButton;
     QPushButton *m_clearCookiesButton;
+    QLineEdit *mDataDirectoryEdit;
+    QPushButton *mDataDirectoryButton;
 };
+
 
 #endif // SETTINGSVIEW_H

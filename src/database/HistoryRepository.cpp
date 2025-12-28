@@ -87,6 +87,10 @@ HistoryEntry HistoryRepository::getHistoryByChapterId(long chapterId)
 {
     HistoryEntry entry;
     entry.id = -1;
+    entry.chapterId = -1;
+    entry.mangaId = -1;
+    entry.lastRead = 0;
+    entry.timeRead = 0;
 
     QSqlQuery query;
     query.prepare(

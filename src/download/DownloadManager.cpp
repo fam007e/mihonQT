@@ -16,9 +16,9 @@ DownloadManager& DownloadManager::instance()
 
 DownloadManager::DownloadManager(QObject *parent)
     : QObject(parent)
+    , m_downloadPath(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/downloads")
 {
     // Default download path
-    m_downloadPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/downloads";
     QDir().mkpath(m_downloadPath);
 }
 

@@ -20,6 +20,7 @@ public:
     virtual QString name() const = 0;
     virtual long id() const = 0;
     virtual QString lang() const = 0;
+    virtual QString baseUrl() const = 0;
     virtual bool supportsLatest() const = 0;
 
     // Browse related
@@ -32,6 +33,7 @@ public:
 
     // Chapters
     virtual QList<SChapter> getChapterList(const Manga& manga) = 0;
+    virtual QList<QString> getPageList(const Chapter& chapter) = 0;
 
 signals:
     // Can add signals here for progress, errors, etc.

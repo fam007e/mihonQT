@@ -7,8 +7,13 @@
 #include "../../database/MangaRepository.h"
 #include "../../database/HistoryRepository.h"
 #include "../../database/DatabaseManager.h"
+#include "../../database/DatabaseManager.h"
 #include "../../config/PreferenceManager.h"
+#include "../../source/SourceManager.h" // Needed for SourceManager access
 
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QLabel>
@@ -23,7 +28,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 
-ReaderWidget::ReaderWidget(QWidget *parent)
+ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
     : QWidget(parent),
       m_mainLayout(new QVBoxLayout(this)),
       m_scrollArea(new QScrollArea(this)),
@@ -33,13 +38,14 @@ ReaderWidget::ReaderWidget(QWidget *parent)
       m_currentPageIndex(0),
       m_readingMode(Webtoon),
       m_localSource(new LocalSource()),
+      m_sourceManager(sourceManager),
       m_chapterRepo(new ChapterRepository()),
       m_mangaRepo(new MangaRepository()),
       m_historyRepo(new HistoryRepository()),
       m_settingsOverlay(nullptr)
 {
     reloadSettings();
-
+    // ... (rest of constructor same) ...
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
@@ -81,7 +87,9 @@ ReaderWidget::ReaderWidget(QWidget *parent)
 ReaderWidget::~ReaderWidget()
 {
     saveReadingProgress();
+    // m_localSource is owned by us
     delete m_localSource;
+    // m_sourceManager is NOT owned by us
     delete m_chapterRepo;
     delete m_mangaRepo;
     delete m_historyRepo;
@@ -163,7 +171,6 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId)
     }
 }
 
-
 void ReaderWidget::clearChapterContent()
 {
     // Clear Webtoon content
@@ -184,8 +191,15 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
     clearChapterContent();
     qDebug() << "ReaderWidget: Loading pages for chapter:" << chapter.name() << "URL:" << chapter.url();
 
-    QList<QString> pageUrls; // List of URLs for pages within the chapter
     QString chapterUrl = chapter.url();
+
+    if (chapterUrl.startsWith("http://") || chapterUrl.startsWith("https://")) {
+        loadOnlineChapter(chapter);
+        return;
+    }
+
+    QList<QString> pageUrls; // List of URLs for pages within the chapter
+    // ... existing local/cbz logic ...
 
     if (chapterUrl.startsWith("cbz://")) {
         chapterUrl.remove(0, 6); // Remove "cbz://" prefix to get archive path
@@ -218,6 +232,8 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
         QDir chapterDir(chapterUrl);
         if (!chapterDir.exists() || !chapterDir.isReadable()) {
             qWarning() << "Chapter directory does not exist or is not readable:" << chapterUrl;
+            // Fallback: If it's just a file path that doesn't exist, maybe it was meant for online but saved wrong?
+            // But here we entered "else" so it didn't start with http.
             return;
         }
         QFileInfoList entries = chapterDir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
@@ -239,13 +255,13 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
         return;
     }
 
-    // Load and display images asynchronously
+    // Load and display images asynchronously (Local)
     int pageIndex = 0;
     for (const QString& path : pageUrls) {
         QThreadPool::globalInstance()->start([this, path, pageIndex]() {
             QImage image;
             if (path.startsWith("cbz://")) {
-                // ... (CBZ loading logic same as before) ...
+                // ... (CBZ loading logic) ...
                 QString url = path;
                 url.remove(0, 6);
                 int cbzIndex = url.indexOf(".cbz/", 0, Qt::CaseInsensitive);
@@ -280,6 +296,83 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
 
     // Resize loaded pages vector
     m_loadedPages.resize(pageUrls.size());
+}
+
+void ReaderWidget::loadOnlineChapter(const Chapter& chapter)
+{
+    // 1. Get Source
+    SourceBase* source = m_sourceManager->getSourceById(m_currentManga.source());
+    if (!source) {
+        qWarning() << "ReaderWidget: Source not found for online chapter.";
+        return;
+    }
+
+    // 2. Fetch Page List (Urls)
+    // This calls the JS getPageList implementation.
+    // Assuming getPageList returns a list of objects {index: 0, url: "..."} or just a list of page objects.
+    // We need to implement getPageList in SourceBase/JavascriptSource first if not present?
+    // User added getPageList to JS, so JavascriptSource needs to expose/call it.
+    // SourceBase needs virtual QList<Page> getPageList(const Chapter& chapter);
+    // Wait, SourceBase signature needs checking.
+
+    // Assuming SourceBase interface update (I will check SourceBase.h next).
+    // For now, let's assume getPageList returns just a list of URLs for simplicity or check existing code.
+    QList<QString> pageUrls = source->getPageList(chapter); // We need to ensure this method exists and works.
+
+    if (pageUrls.isEmpty()) {
+         qDebug() << "ReaderWidget: No pages found from source.";
+         QLabel* label = new QLabel("No pages returned from source.", m_contentWidget);
+         m_contentLayout->addWidget(label);
+         return;
+    }
+
+    m_loadedPages.resize(pageUrls.size());
+
+    // 3. Display Images (Download/Fetch)
+    // For online images, we should probably fetch them via NetworkAccessManager?
+    // Or just use QNetworkAccessManager in a thread/async?
+    // Ideally, we load them one by one or in parallel.
+
+    int pageIndex = 0;
+    for (const QString& url : pageUrls) {
+        // Simple async fetch using QNetworkAccessManager (via run_command? No, code here).
+        // Since we don't have easy access to NAM for async image fetching in this context without a proper async loader class...
+        // We can spawn a thread to download synchronous? Or use QNAM properly.
+        // Let's us QNetworkAccessManager from a new instance or passed one?
+        // Creating a new QNAM per request is okayish for small apps but better to reuse.
+        // MainWindow has one but ReaderWidget doesn't.
+
+        // MVP: Use QNetworkAccessManager in a simple way.
+        // Actually best to do this in main thread async.
+
+        QNetworkAccessManager* nam = new QNetworkAccessManager(this);
+        QNetworkRequest req(url);
+        req.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+        // Add Referer if available
+        QString baseUrl = source->baseUrl();
+        if (!baseUrl.isEmpty()) {
+            req.setRawHeader("Referer", baseUrl.toUtf8());
+        }
+
+        QNetworkReply* reply = nam->get(req);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pageIndex, nam]() {
+            if (reply->error() == QNetworkReply::NoError) {
+                QByteArray data = reply->readAll();
+                QImage img;
+                img.loadFromData(data);
+                if (!img.isNull()) {
+                     emit pageLoaded(img, pageIndex);
+                }
+            } else {
+                qWarning() << "Failed to load page" << pageIndex << reply->errorString();
+            }
+            reply->deleteLater();
+            nam->deleteLater(); // Cleanup
+        });
+
+        pageIndex++;
+    }
 }
 
 void ReaderWidget::displayPage(const QImage& image, int pageIndex)
@@ -410,37 +503,53 @@ void ReaderWidget::mousePressEvent(QMouseEvent *event)
 void ReaderWidget::nextPage()
 {
     if (m_readingMode == Webtoon) {
-        m_scrollArea->verticalScrollBar()->setValue(
-            m_scrollArea->verticalScrollBar()->value() + m_scrollArea->viewport()->height() / 2
-        );
+        QScrollBar *vBar = m_scrollArea->verticalScrollBar();
+        if (vBar->value() >= vBar->maximum()) {
+            emit requestNextChapter(m_currentChapterId);
+        } else {
+            vBar->setValue(vBar->value() + m_scrollArea->viewport()->height() / 2);
+        }
     } else {
         int increment = (m_readingMode == DoublePageSpread) ? 2 : 1;
+        bool isRTL = (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread);
 
-        if (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread) {
-             // For RightToLeft, "Next" usually means "Previous Index" (reading backwards)
-             // BUT, usually navigation keys are mapped: Right Arrow -> Next Page (visually next)
-             // In standard manga readers:
-             // Tap Left -> Next Page (Index + 1)
-             // Tap Right -> Previous Page (Index - 1)
-             // Let's stick to the keyPressEvent logic:
-             // Key_Right -> if RTL, previousPage()
-             // Key_Left -> if RTL, nextPage()
+        // Logic for "Next" action (advancing reading progress)
+        // For RTL, "Next" key moves to LOWER index usually?
+        // No, standard mapping: Right Key = Previous Page (in RTL context usually goes to 'next' visual page which is previous index, wait).
+        // Let's stick to: nextPage() advances the *index* (1 -> 2).
+        // If RTL, Key_Left calls nextPage(). Key_Right calls previousPage().
 
-             // So nextPage() here means "Advance in content" (Index + 1 or + 2)
-             if (m_currentPageIndex + increment < m_loadedPages.size()) {
-                m_currentPageIndex += increment;
-                updateView();
-            } else if (m_currentPageIndex + 1 < m_loadedPages.size()) {
-                 // Handle odd last page
-                 m_currentPageIndex++;
-                 updateView();
-            }
+        bool atEnd = false;
+        if (m_currentPageIndex + increment >= m_loadedPages.size()) {
+             // If we are at the last page (or spread containing last page)
+             // Check if we are ALREADY at the very end state (viewing it)
+             // Actually, usually users want one more press to trigger "Next Chapter".
+
+             // Simplest: Check if we are attempting to go past the last valid index.
+             // If m_currentPageIndex is already at (size-1), and we try to go next.
+
+             // Let's refine simple index logic:
+             if (m_currentPageIndex + 1 >= m_loadedPages.size()) {
+                 atEnd = true;
+             }
+        }
+
+        if (atEnd) {
+            emit requestNextChapter(m_currentChapterId);
+            return;
+        }
+
+        // Standard Progression
+        if (m_currentPageIndex + increment < m_loadedPages.size()) {
+            m_currentPageIndex += increment;
+            updateView();
+        } else if (m_currentPageIndex + 1 < m_loadedPages.size()) {
+            // Handle odd last page in double spread
+            m_currentPageIndex++;
+            updateView();
         } else {
-            // LTR
-            if (m_currentPageIndex + increment < m_loadedPages.size()) {
-                m_currentPageIndex += increment;
-                updateView();
-            }
+            // Fallback for exactly at limit
+            emit requestNextChapter(m_currentChapterId);
         }
     }
 }

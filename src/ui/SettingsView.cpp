@@ -10,7 +10,9 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QKeyEvent>
+#include <QKeyEvent>
 #include <QMouseEvent>
+#include <QStandardPaths>
 
 SettingsView::SettingsView(QWidget *parent) : QWidget(parent)
 {
@@ -557,7 +559,42 @@ void SettingsView::createDataStoragePage()
     storageLayout->addWidget(m_restoreBackupButton);
     storageLayout->addWidget(m_clearCacheButton);
     storageLayout->addWidget(m_clearCookiesButton);
+
+    // Data Directory Group
+    QGroupBox *dataDirGroup = new QGroupBox("Data Directory", this);
+    QVBoxLayout *dataDirLayout = new QVBoxLayout(dataDirGroup);
+
+    QLabel *dataInfoLabel = new QLabel("Location for extensions, downloads, and other data.", this);
+    dataDirLayout->addWidget(dataInfoLabel);
+
+    QHBoxLayout *pathLayout = new QHBoxLayout();
+    mDataDirectoryEdit = new QLineEdit(this);
+    mDataDirectoryEdit->setReadOnly(true);
+    // Load setting
+    QString defaultDataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    mDataDirectoryEdit->setText(PreferenceManager::instance().value("dataDirectory", defaultDataDir).toString());
+
+    mDataDirectoryButton = new QPushButton("Browse...", this);
+    connect(mDataDirectoryButton, &QPushButton::clicked, this, [this](){
+        QString dir = QFileDialog::getExistingDirectory(this, "Select Data Directory",
+                                                      mDataDirectoryEdit->text());
+        if (!dir.isEmpty()) {
+            mDataDirectoryEdit->setText(dir);
+            QSettings settings("MihonQT", "MihonQT");
+            settings.setValue("dataDirectory", dir);
+            emit dataDirectoryChanged(dir);
+             QMessageBox::information(this, "Restart Required", "Please restart MihonQT for data directory changes to take full effect.");
+        }
+    });
+
+    pathLayout->addWidget(mDataDirectoryEdit);
+    pathLayout->addWidget(mDataDirectoryButton);
+    dataDirLayout->addLayout(pathLayout);
+
+    storageLayout->addWidget(dataDirGroup);
+
     layout->addWidget(storageGroup);
+
 
     m_contentStack->addWidget(page);
 }

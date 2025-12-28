@@ -1,6 +1,11 @@
 #include "SourceManager.h"
 #include "SourceBase.h"
+#include "SourceManager.h"
+#include "SourceBase.h"
+#include "JavascriptSource.h"
 #include <QDebug> // For qWarning
+#include <QDir>
+#include <QDirIterator>
 
 SourceManager::SourceManager(QObject *parent)
     : QObject(parent)
@@ -36,7 +41,40 @@ void SourceManager::addSource(SourceBase* source)
     m_sources.append(source);
     m_sourcesById.insert(source->id(), source);
     m_sourcesByName.insert(source->name(), source);
+    m_sourcesByName.insert(source->name(), source);
 }
+
+void SourceManager::loadExtensions(const QString& directoryPath, QJSEngine* engine, NetworkAccessManager* networkManager)
+{
+    qDebug() << "Loading extensions from:" << directoryPath;
+    QDir dir(directoryPath);
+    if (!dir.exists()) {
+        qWarning() << "Extensions directory does not exist:" << directoryPath;
+        // Try to create it? Or just return.
+        // dir.mkpath(".");
+        return;
+    }
+
+    QDirIterator it(directoryPath, QStringList() << "*.js", QDir::Files, QDirIterator::NoIteratorFlags);
+    while (it.hasNext()) {
+        QString scriptPath = it.next();
+        qDebug() << "Found extension script:" << scriptPath;
+        JavascriptSource* source = new JavascriptSource(scriptPath, engine, networkManager, this);
+        // JavascriptSource init might fail if script is bad, but we add it anyway so we can see it in UI (maybe with error state?)
+        // Ideally JavascriptSource should have an isValid() check.
+        // For now, assuming it parses okay or logs errors.
+
+        // Check if ID/Name valid?
+        if (source->id() <= 0) {
+            qWarning() << "Skipping invalid source (invalid ID) from:" << scriptPath;
+            delete source;
+            continue;
+        }
+
+        addSource(source);
+    }
+}
+
 
 SourceBase* SourceManager::getSourceById(long id) const
 {

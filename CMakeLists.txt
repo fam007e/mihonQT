@@ -31,6 +31,7 @@ add_executable(MihonQT
     src/source/SourceBase.cpp
     src/source/SourceManager.cpp
     src/source/JavascriptSource.cpp # Add JavascriptSource.cpp
+    src/source/HtmlParser.cpp # Add HtmlParser.cpp
     src/network/NetworkAccessManager.cpp # Add NetworkAccessManager.cpp
     src/ui/reader/ReaderWidget.cpp
     src/ui/reader/ReaderSettingsOverlay.cpp

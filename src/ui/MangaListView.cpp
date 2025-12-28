@@ -55,8 +55,10 @@ void MangaListView::updateGridLayout()
         m_gridLayout->takeAt(i);
     }
 
-    int cardWidth = 130 + 15;
+    int cardWidth = 145; // Card width + spacing estimate
     int availableWidth = m_scrollArea->viewport()->width();
+    if (availableWidth <= 0) availableWidth = width(); // Fallback
+
     int columns = qMax(1, availableWidth / cardWidth);
 
     for (int i = 0; i < m_cards.size(); ++i) {

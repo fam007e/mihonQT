@@ -22,6 +22,7 @@ public:
     QString name() const override;
     long id() const override;
     QString lang() const override;
+    QString baseUrl() const override;
     bool supportsLatest() const override;
 
     // Browse related
@@ -34,6 +35,7 @@ public:
 
     // Chapters
     QList<SChapter> getChapterList(const Manga& manga) override;
+    QList<QString> getPageList(const Chapter& chapter) override;
 
     // Helper to set base directory (specific to LocalSource, not in SourceBase)
     void setBaseDirectory(const QString& path);

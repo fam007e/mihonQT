@@ -20,6 +20,7 @@ NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) /
 QJSValue NetworkAccessManager::get(const QString& url)
 {
     QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
     QNetworkReply *reply = m_networkManager.get(request);
 
     QEventLoop loop;

@@ -43,6 +43,7 @@ private slots:
     void onBackRequested(); // [NEW]
     void onLocalMangaPathChanged(const QString& newPath);
     void onNavigationRequested(int index);
+    void onRequestNextChapter(long currentChapterId);
 
 private:
     void setupUi();

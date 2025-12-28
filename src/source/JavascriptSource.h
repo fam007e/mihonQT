@@ -19,6 +19,7 @@ public:
     QString name() const override;
     long id() const override;
     QString lang() const override;
+    QString baseUrl() const override;
     bool supportsLatest() const override;
 
     QList<Manga> getPopularManga() override;
@@ -26,6 +27,7 @@ public:
     QList<Manga> getSearchManga(const QString& query) override;
     Manga getMangaDetails(const Manga& manga) override;
     QList<SChapter> getChapterList(const Manga& manga) override;
+    QList<QString> getPageList(const Chapter& chapter) override;
 
 private:
     QString m_scriptPath;

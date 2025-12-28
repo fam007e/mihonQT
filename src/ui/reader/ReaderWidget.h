@@ -18,6 +18,7 @@
 
 class LocalSource;
 class ReaderSettingsOverlay;
+class SourceManager; // Forward decl
 
 class ReaderWidget : public QWidget
 {
@@ -42,13 +43,13 @@ public:
     };
     Q_ENUM(ScaleType)
 
-    explicit ReaderWidget(QWidget *parent = nullptr);
+    explicit ReaderWidget(SourceManager* sourceManager, QWidget *parent = nullptr);
     ~ReaderWidget();
 
     void loadChapter(long mangaId, long chapterId);
     void loadManga(const Manga& manga);
     void setReadingMode(ReadingMode mode);
-    void reloadSettings(); // New method to reload settings
+    void reloadSettings();
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -62,6 +63,7 @@ signals:
     void navigateBack();
     void pageLoaded(const QImage& image, int pageIndex);
     void chapterClosed(long chapterId, int lastPageRead);
+    void requestNextChapter(long currentChapterId); // Signal to request loading the next chapter
 
 public slots:
     void displayPage(const QImage& image, int pageIndex);
@@ -69,6 +71,7 @@ public slots:
 private:
     void clearChapterContent();
     void loadAndDisplayPages(const Chapter& chapter);
+    void loadOnlineChapter(const Chapter& chapter); // New method
     void setupWebtoonView();
     void setupPagedView();
     void updateView();
@@ -90,11 +93,11 @@ private:
     QScrollArea *m_pagedScrollArea;
     QLabel *m_pagedLabel;
     int m_currentPageIndex;
-    QVector<QImage> m_loadedPages; // Store loaded pages for paged view
+    QVector<QImage> m_loadedPages;
 
     ReadingMode m_readingMode;
     ScaleType m_scaleType;
-    int m_webtoonPadding; // Percentage 0-25
+    int m_webtoonPadding;
     bool m_keepScreenOn;
     bool m_fullscreen;
 
@@ -102,6 +105,7 @@ private:
     QVector<Chapter> m_chapters;
 
     LocalSource *m_localSource;
+    SourceManager *m_sourceManager; // New member
     ChapterRepository *m_chapterRepo;
     MangaRepository *m_mangaRepo;
     HistoryRepository *m_historyRepo;

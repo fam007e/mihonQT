@@ -3,7 +3,9 @@
 #include "database/MangaRepository.h"
 #include "database/ChapterRepository.h"
 #include "model/Manga.h"
-#include "model/Chapter.h"
+#include <QStandardPaths>
+#include <QDir>
+
 #include "source/LocalSource.h"
 #include "ui/SourceListView.h"
 #include "ui/MangaListView.h"
@@ -45,13 +47,24 @@ MainWindow::MainWindow(QWidget *parent)
     LocalSource *localSource = new LocalSource(localMangaPath, this);
     m_sourceManager->addSource(localSource);
 
-    JavascriptSource *jsSource = new JavascriptSource(
-        "/home/fam007e/Github/mihonQT/src/sources/js/ExampleSource.js",
-        m_jsEngine,
-        m_networkManager,
-        this
-    );
-    m_sourceManager->addSource(jsSource);
+    // Load extensions from configured data location
+    QString defaultDataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString dataPath = settings.value("dataDirectory", defaultDataDir).toString();
+    QString extensionsPath = dataPath + "/extensions";
+
+
+    // Ensure directory exists
+    QDir dir(extensionsPath);
+    if (!dir.exists()) {
+        dir.mkpath(".");
+    }
+
+    m_sourceManager->loadExtensions(extensionsPath, m_jsEngine, m_networkManager);
+
+
+
+
+
 
     // --- Initialize Components ---
 
@@ -86,8 +99,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_mangaDetailsView, &MangaDetailsView::libraryStatusChanged, m_libraryView, &LibraryView::refreshLibrary);
 
     // 5. Reader View
-    m_readerWidget = new ReaderWidget(this);
+    m_readerWidget = new ReaderWidget(m_sourceManager, this);
     connect(m_readerWidget, &ReaderWidget::navigateBack, this, &MainWindow::onBackRequested);
+    connect(m_readerWidget, &ReaderWidget::requestNextChapter, this, &MainWindow::onRequestNextChapter);
 
     // 6. Settings View
     m_settingsView = new SettingsView(this);
@@ -156,6 +170,9 @@ connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow:
     // Initial refresh
     m_libraryView->refreshLibrary();
     // Sources already populated via constructor now
+
+    // Initial navigation
+    onNavigationRequested(0);
 }
 
 MainWindow::~MainWindow()
@@ -504,3 +521,37 @@ void MainWindow::onLocalMangaPathChanged(const QString& newPath)
     }
 }
 
+void MainWindow::onRequestNextChapter(long currentChapterId)
+{
+    ChapterRepository& chapterRepo = DatabaseManager::instance().chapterRepository();
+    Chapter currentChapter = chapterRepo.getChapterById(currentChapterId);
+
+    if (currentChapter.id() == -1) return;
+
+    QList<Chapter> allChapters = chapterRepo.getChaptersByMangaId(currentChapter.mangaId());
+
+    // Find next chapter based on number (Assuming reading 1 -> 2 -> 3)
+    // Find smallest number that is strictly greater than current number
+
+    Chapter nextChapter;
+    double minDiff = 999999.0;
+
+    for (const Chapter& chap : allChapters) {
+        if (chap.chapterNumber() > currentChapter.chapterNumber()) {
+            double diff = chap.chapterNumber() - currentChapter.chapterNumber();
+            if (diff < minDiff) {
+                minDiff = diff;
+                nextChapter = chap;
+            }
+        }
+    }
+
+    if (nextChapter.id() != -1) {
+        qDebug() << "Auto-loading next chapter:" << nextChapter.name();
+        showReader(nextChapter.mangaId(), nextChapter.id());
+    } else {
+        qDebug() << "No next chapter found.";
+        // Optional: Show toast "No more chapters"
+        // onBackRequested();
+    }
+}
