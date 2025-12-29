@@ -22,7 +22,6 @@ qtcreator_process_stub.app/
 *.moc
 *.o
 *.obj
-*.qrc
 *_automoc.cpp
 moc_*.cpp
 qrc_*.cpp

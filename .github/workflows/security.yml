@@ -1,4 +1,4 @@
-name: "CodeQL Security Analysis"
+name: "CodeQL Advanced"
 
 on:
   push:
@@ -10,42 +10,69 @@ on:
 
 jobs:
   analyze:
-    name: Analyze
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
       security-events: write
+      packages: read
 
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'cpp' ]
+        include:
+        - language: actions
+          build-mode: none
+        - language: c-cpp
+          build-mode: manual
+        - language: javascript-typescript
+          build-mode: none
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
-        # If you wish to specify custom queries, you can do so here
-        # queries: +security-extended,etc.
+        build-mode: ${{ matrix.build-mode }}
 
-    - name: Install Qt dependencies
+    - name: Install dependencies (C++ only)
+      if: matrix.language == 'c-cpp'
       run: |
         sudo apt-get update
-        sudo apt-get install -y qt6-base-dev
+        sudo apt-get install -y qt6-base-dev qt6-declarative-dev qt6-5compat-dev libxkbcommon-dev libgl1-mesa-dev cppcheck
 
-    - name: Autobuild
-      # CodeQL will hook into the build process.
-      # Ensure the build commands are accurate for your project.
+    - name: Run cppcheck (C++ only)
+      if: matrix.language == 'c-cpp'
+      run: |
+        cppcheck --enable=all --suppress=missingIncludeSystem --xml --output-file=cppcheck-report.xml src/
+      continue-on-error: true
+
+    - name: flawfinder_scan (C++ only)
+      if: matrix.language == 'c-cpp'
+      uses: david-a-wheeler/flawfinder@8e4a779ad59dbfaee5da586aa9210853b701959c
+      with:
+        arguments: '--sarif ./'
+        output: 'flawfinder_results.sarif'
+
+    - name: Upload flawfinder results (C++ only)
+      if: matrix.language == 'c-cpp'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{github.workspace}}/flawfinder_results.sarif
+
+    - name: Build project (C++ only)
+      if: matrix.build-mode == 'manual'
       run: |
         cmake -B build -S .
         cmake --build build
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"
