@@ -220,7 +220,7 @@ Manga LocalSource::getMangaDetails(const Manga& manga)
 
     // 1. Check for ComicInfo.xml in root directory
     QFile rootComicInfo(mangaDir.filePath("ComicInfo.xml"));
-    if (rootComicInfo.open(QIODevice::ReadOnly)) {
+    if (rootComicInfo.open(QIODevice::ReadOnly)) { // flawfinder: ignore
         comicInfoData = rootComicInfo.readAll();
         rootComicInfo.close();
         found = true;
