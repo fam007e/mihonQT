@@ -76,7 +76,7 @@ void UpdatesView::refreshUpdates()
         QDateTime dt = QDateTime::fromSecsSinceEpoch(entry.dateFetch);
         QString timeStr = dt.toString("MMM d, hh:mm AP");
 
-        QString readStatus = entry.read ? "✓" : "•";
+        QString readStatus = entry.read ? "✓" : "•"; // flawfinder: ignore
         QString text = QString("%1 %2\n%3 • %4")
             .arg(readStatus)
             .arg(entry.mangaTitle)
@@ -86,7 +86,7 @@ void UpdatesView::refreshUpdates()
         QListWidgetItem *item = new QListWidgetItem(text, m_listWidget);
         item->setData(Qt::UserRole, i);
 
-        if (entry.read) {
+        if (entry.read) { // flawfinder: ignore
             item->setForeground(QColor("#6B7280")); // Dimmed for read
         }
     }

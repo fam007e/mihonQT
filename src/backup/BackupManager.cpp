@@ -37,7 +37,7 @@ bool BackupManager::exportBackup(const QString& filePath)
     QJsonObject data = createBackupData();
 
     QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly)) {
+    if (!file.open(QIODevice::WriteOnly)) { // flawfinder: ignore
         emit exportFailed("Could not open file for writing: " + file.errorString());
         return false;
     }
@@ -135,7 +135,7 @@ QJsonArray BackupManager::exportChapters()
             obj["mangaId"] = static_cast<qint64>(c.mangaId());
             obj["url"] = c.url();
             obj["name"] = c.name();
-            obj["read"] = c.read();
+            obj["read"] = c.read(); // flawfinder: ignore
             obj["bookmark"] = c.bookmark();
             obj["lastPageRead"] = static_cast<qint64>(c.lastPageRead());
             obj["chapterNumber"] = c.chapterNumber();
@@ -167,7 +167,7 @@ QJsonArray BackupManager::exportHistory()
 bool BackupManager::importBackup(const QString& filePath)
 {
     QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    if (!file.open(QIODevice::ReadOnly)) { // flawfinder: ignore
         emit importFailed("Could not open file: " + file.errorString());
         return false;
     }

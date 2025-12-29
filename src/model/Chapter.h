@@ -28,7 +28,7 @@ public:
     const QString& url() const { return m_url; }
     const QString& name() const { return m_name; }
     const QString& scanlator() const { return m_scanlator; }
-    bool read() const { return m_read; }
+    bool read() const { return m_read; } // flawfinder: ignore
     bool bookmark() const { return m_bookmark; }
     long lastPageRead() const { return m_lastPageRead; }
     double chapterNumber() const { return m_chapterNumber; }
@@ -45,7 +45,7 @@ public:
     void setUrl(const QString& url) { m_url = url; }
     void setName(const QString& name) { m_name = name; }
     void setScanlator(const QString& scanlator) { m_scanlator = scanlator; }
-    void setRead(bool read) { m_read = read; }
+    void setRead(bool read) { m_read = read; } // flawfinder: ignore
     void setBookmark(bool bookmark) { m_bookmark = bookmark; }
     void setLastPageRead(long lastPageRead) { m_lastPageRead = lastPageRead; }
     void setChapterNumber(double chapterNumber) { m_chapterNumber = chapterNumber; }

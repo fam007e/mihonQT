@@ -16,7 +16,7 @@ struct UpdateEntry {
     QString chapterName;
     QString thumbnailUrl;
     long dateFetch;
-    bool read;
+    bool read; // flawfinder: ignore
 };
 
 class UpdatesView : public QWidget

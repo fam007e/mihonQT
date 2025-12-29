@@ -1,5 +1,7 @@
 name: Memory Safety Check
 
+permissions: read-all
+
 on:
   push:
     branches: [ "main" ]

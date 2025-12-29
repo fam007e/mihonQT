@@ -60,7 +60,7 @@ JavascriptSource::~JavascriptSource()
 void JavascriptSource::initScript()
 {
     QFile scriptFile(m_scriptPath);
-    if (!scriptFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (!scriptFile.open(QIODevice::ReadOnly | QIODevice::Text)) { // flawfinder: ignore
         qWarning() << "Could not open JavaScript source file:" << m_scriptPath;
         return;
     }

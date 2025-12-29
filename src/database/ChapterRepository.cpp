@@ -24,7 +24,7 @@ bool ChapterRepository::insertChapter(const Chapter& chapter)
     query.bindValue(":url", chapter.url());
     query.bindValue(":name", chapter.name());
     query.bindValue(":scanlator", chapter.scanlator());
-    query.bindValue(":read", chapter.read());
+    query.bindValue(":read", chapter.read()); // flawfinder: ignore
     query.bindValue(":bookmark", chapter.bookmark());
     query.bindValue(":last_page_read", static_cast<qlonglong>(chapter.lastPageRead()));
     query.bindValue(":chapter_number", chapter.chapterNumber());
@@ -57,7 +57,7 @@ bool ChapterRepository::updateChapter(const Chapter& chapter)
     query.bindValue(":url", chapter.url());
     query.bindValue(":name", chapter.name());
     query.bindValue(":scanlator", chapter.scanlator());
-    query.bindValue(":read", chapter.read());
+    query.bindValue(":read", chapter.read()); // flawfinder: ignore
     query.bindValue(":bookmark", chapter.bookmark());
     query.bindValue(":last_page_read", static_cast<qlonglong>(chapter.lastPageRead()));
     query.bindValue(":chapter_number", chapter.chapterNumber());
