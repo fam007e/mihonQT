@@ -33,6 +33,11 @@ jobs:
     - name: Build project
       run: cmake --build build
 
+    - name: Run Flawfinder security scan
+      run: |
+        pip install flawfinder
+        flawfinder --minlevel=1 --exclude=libs/ --quiet --dataonly src/ || true
+
     - name: Run tests (if any)
       # Add a step here to run your test suite
       # For example: ctest --test-dir build
