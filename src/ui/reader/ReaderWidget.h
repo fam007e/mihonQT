@@ -29,7 +29,8 @@ public:
         Webtoon,
         LeftToRight,
         RightToLeft,
-        DoublePageSpread // Right-to-Left Double Page
+        DoublePageSpread, // Right-to-Left Double Page
+        DoublePageSpreadLeftToRight // Left-to-Right Double Page
     };
     Q_ENUM(ReadingMode)
 
@@ -46,7 +47,7 @@ public:
     explicit ReaderWidget(SourceManager* sourceManager, QWidget *parent = nullptr);
     ~ReaderWidget();
 
-    void loadChapter(long mangaId, long chapterId);
+    void loadChapter(long mangaId, long chapterId, bool startAtEnd = false);
     void loadManga(const Manga& manga);
     void setReadingMode(ReadingMode mode);
     void reloadSettings();
@@ -64,14 +65,15 @@ signals:
     void pageLoaded(const QImage& image, int pageIndex);
     void chapterClosed(long chapterId, int lastPageRead);
     void requestNextChapter(long currentChapterId); // Signal to request loading the next chapter
+    void requestPreviousChapter(long currentChapterId); // Signal to request loading the previous chapter
 
 public slots:
     void displayPage(const QImage& image, int pageIndex);
 
 private:
     void clearChapterContent();
-    void loadAndDisplayPages(const Chapter& chapter);
-    void loadOnlineChapter(const Chapter& chapter); // New method
+    void loadAndDisplayPages(const Chapter& chapter, bool startAtEnd = false);
+    void loadOnlineChapter(const Chapter& chapter, bool startAtEnd = false); // New method
     void setupWebtoonView();
     void setupPagedView();
     void updateView();
@@ -96,6 +98,7 @@ private:
     QVector<QImage> m_loadedPages;
 
     ReadingMode m_readingMode;
+    ReadingMode m_lastSinglePageMode; // To track preferred direction for Double Page switch
     ScaleType m_scaleType;
     int m_webtoonPadding;
     bool m_keepScreenOn;
@@ -112,6 +115,10 @@ private:
 
     ReaderSettingsOverlay *m_settingsOverlay;
     long m_currentChapterId = -1;
+    bool m_showingTransition = false;
+
+    bool hasNextChapter() const;
+    bool hasPreviousChapter() const;
 };
 
 #endif // READERWIDGET_H

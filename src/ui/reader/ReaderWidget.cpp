@@ -24,6 +24,7 @@
 #include <QFileInfo>
 #include <QThread> // For background loading
 #include <QtConcurrent/QtConcurrent> // For asynchronous tasks
+#include <algorithm> // For std::sort
 #include <quazip/quazipfile.h> // For QuaZipFile for CBZ reading
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -36,13 +37,15 @@ ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
       m_contentLayout(new QVBoxLayout(m_contentWidget)),
       m_pagedLabel(new QLabel(this)),
       m_currentPageIndex(0),
-      m_readingMode(Webtoon),
+      m_readingMode(LeftToRight),
+      m_lastSinglePageMode(LeftToRight), // Initialize default preference
       m_localSource(new LocalSource()),
       m_sourceManager(sourceManager),
       m_chapterRepo(new ChapterRepository()),
       m_mangaRepo(new MangaRepository()),
       m_historyRepo(new HistoryRepository()),
-      m_settingsOverlay(nullptr)
+      m_settingsOverlay(nullptr),
+      m_showingTransition(false)
 {
     reloadSettings();
     // ... (rest of constructor same) ...
@@ -100,7 +103,13 @@ void ReaderWidget::reloadSettings()
     m_scaleType = static_cast<ScaleType>(PreferenceManager::instance().value("reader/scale_type", 1).toInt());
     m_webtoonPadding = PreferenceManager::instance().value("reader/webtoon_padding", 0).toInt();
     m_keepScreenOn = PreferenceManager::instance().value("reader/keep_screen_on", false).toBool();
+    m_keepScreenOn = PreferenceManager::instance().value("reader/keep_screen_on", false).toBool();
     m_fullscreen = PreferenceManager::instance().value("reader/fullscreen", false).toBool();
+
+    int savedMode = PreferenceManager::instance().value("reader/default_mode", 1).toInt(); // Default to LeftToRight (1)
+    if (m_readingMode != static_cast<ReadingMode>(savedMode)) {
+        setReadingMode(static_cast<ReadingMode>(savedMode));
+    }
 
     // Apply Window States
     if (window()) {
@@ -127,6 +136,11 @@ void ReaderWidget::loadManga(const Manga& manga)
     m_currentManga = manga;
     m_localSource->setBaseDirectory(m_currentManga.url()); // Manga.url is the path for local source
     m_chapters = m_chapterRepo->getChaptersByMangaId(m_currentManga.id());
+    // Ensure chapters are sorted by Chapter Number (ASC) for logical reading order
+    std::sort(m_chapters.begin(), m_chapters.end(), [](const Chapter& a, const Chapter& b) {
+        return a.chapterNumber() < b.chapterNumber();
+    });
+
     if (!m_chapters.isEmpty()) {
         loadAndDisplayPages(m_chapters.first()); // Load the first chapter for MVP
     } else {
@@ -135,7 +149,7 @@ void ReaderWidget::loadManga(const Manga& manga)
     }
 }
 
-void ReaderWidget::loadChapter(long mangaId, long chapterId)
+void ReaderWidget::loadChapter(long mangaId, long chapterId, bool startAtEnd)
 {
     // For MVP, we'll assume mangaId is known and load the specific chapter
     // In a real app, you'd load the manga first, then its chapters
@@ -147,6 +161,10 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId)
 
     m_localSource->setBaseDirectory(m_currentManga.url());
     m_chapters = m_chapterRepo->getChaptersByMangaId(mangaId);
+    // Ensure chapters are sorted by Chapter Number (ASC) for logical reading order
+    std::sort(m_chapters.begin(), m_chapters.end(), [](const Chapter& a, const Chapter& b) {
+        return a.chapterNumber() < b.chapterNumber();
+    });
 
     Chapter chapterToLoad;
     if (chapterId == -1 && !m_chapters.isEmpty()) {
@@ -162,7 +180,7 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId)
 
     if (chapterToLoad.id() != -1) {
         m_currentChapterId = chapterToLoad.id();
-        loadAndDisplayPages(chapterToLoad);
+        loadAndDisplayPages(chapterToLoad, startAtEnd);
     } else {
         qDebug() << "ReaderWidget: Chapter not found for ID:" << chapterId << "in manga:" << mangaId;
         // Display an error or go back to manga list view
@@ -184,9 +202,10 @@ void ReaderWidget::clearChapterContent()
     m_loadedPages.clear();
     m_pagedLabel->clear();
     m_currentPageIndex = 0;
+    m_showingTransition = false;
 }
 
-void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
+void ReaderWidget::loadAndDisplayPages(const Chapter& chapter, bool startAtEnd)
 {
     clearChapterContent();
     qDebug() << "ReaderWidget: Loading pages for chapter:" << chapter.name() << "URL:" << chapter.url();
@@ -194,7 +213,7 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
     QString chapterUrl = chapter.url();
 
     if (chapterUrl.startsWith("http://") || chapterUrl.startsWith("https://")) {
-        loadOnlineChapter(chapter);
+        loadOnlineChapter(chapter, startAtEnd);
         return;
     }
 
@@ -296,9 +315,43 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
 
     // Resize loaded pages vector
     m_loadedPages.resize(pageUrls.size());
+
+    if (startAtEnd && !m_loadedPages.isEmpty()) {
+        m_currentPageIndex = m_loadedPages.size() - 1;
+        // Adjust for double spread if needed?
+        // If Double Page, index should be even (for Left) or odd?
+        // In "Double Page (LTR)", pairs are (0,1), (2,3).
+        // If size is 10 (indexes 0..9). Last is 9. Pair is (8,9).
+        // If we set index to 9.
+        // updateView() checks `m_currentPageIndex`.
+        // If DoubleSpread LTR: first=9, second=10 (invalid).
+        // It displays 9 on Left.
+        // Wait, pair logic:
+        // LTR: [Page N] [Page N+1]
+        // If N=9. [9] [10].
+        // If we want the last pair, we should ensure we look at the spread containing the last page.
+        // Usually readers snap to the start of the pair.
+        // If total 10 pages interactions 0-9.
+        // Pairs: 0-1, 2-3, 4-5, 6-7, 8-9.
+        // Start indices: 0, 2, 4, 6, 8.
+        // If we go to last page 9.
+        // If we set m_currentPageIndex = 9.
+        // updateView: first=9. second=10.
+        // LTR: Left=9. Right=Null. -> Shows Page 9 on Left.
+        // This is fine. But user might prefer the full spread if 8 exists.
+        // But strict "last page" is 9.
+        // Standard behavior: Go to last page.
+        // If we want "Last Spread", we might decrement by 1 if odd?
+        // For now, simple Last Index is robust enough.
+
+        // Also update Paged View immediately if needed, but displayPage will call updateView when images load?
+        // No, displayPage calls updateView only if index matches.
+        // We need to call updateView to set initial state (even empty).
+        updateView();
+    }
 }
 
-void ReaderWidget::loadOnlineChapter(const Chapter& chapter)
+void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
 {
     // 1. Get Source
     SourceBase* source = m_sourceManager->getSourceById(m_currentManga.source());
@@ -327,6 +380,11 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter)
     }
 
     m_loadedPages.resize(pageUrls.size());
+
+    if (startAtEnd && !m_loadedPages.isEmpty()) {
+        m_currentPageIndex = m_loadedPages.size() - 1;
+        updateView();
+    }
 
     // 3. Display Images (Download/Fetch)
     // For online images, we should probably fetch them via NetworkAccessManager?
@@ -414,12 +472,34 @@ void ReaderWidget::displayPage(const QImage& image, int pageIndex)
 
 void ReaderWidget::setReadingMode(ReadingMode mode)
 {
-    m_readingMode = mode;
+    // Update Single Page Preference
+    if (mode == LeftToRight || mode == RightToLeft) {
+        m_lastSinglePageMode = mode;
+    }
+
+    // Smart Double Page Selection
+    if (mode == DoublePageSpread) {
+        if (m_lastSinglePageMode == LeftToRight) {
+            m_readingMode = DoublePageSpreadLeftToRight;
+        } else {
+            m_readingMode = DoublePageSpread; // Keeps it as RTL Spread (value 3)
+        }
+    } else {
+        m_readingMode = mode;
+    }
+
+    // Apply Mode
     if (m_readingMode == Webtoon) {
         m_viewStack->setCurrentIndex(0);
     } else {
         m_viewStack->setCurrentIndex(1);
         updateView();
+    }
+
+    // Ensure Settings Overlay shows correct generic "Double Page"
+    // The overlay mapping (4 -> 3) is handled in ReaderSettingsOverlay::setCurrentReadingMode
+    if (m_settingsOverlay) {
+        m_settingsOverlay->setCurrentReadingMode(m_readingMode);
     }
 }
 
@@ -428,12 +508,12 @@ void ReaderWidget::keyPressEvent(QKeyEvent *event)
     switch (event->key()) {
     case Qt::Key_Right:
     case Qt::Key_D:
-        if (m_readingMode == RightToLeft) previousPage();
+        if (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread) previousPage();
         else nextPage();
         break;
     case Qt::Key_Left:
     case Qt::Key_A:
-        if (m_readingMode == RightToLeft) nextPage();
+        if (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread) nextPage();
         else previousPage();
         break;
     case Qt::Key_Space:
@@ -505,12 +585,14 @@ void ReaderWidget::nextPage()
     if (m_readingMode == Webtoon) {
         QScrollBar *vBar = m_scrollArea->verticalScrollBar();
         if (vBar->value() >= vBar->maximum()) {
-            emit requestNextChapter(m_currentChapterId);
+            if (hasNextChapter()) {
+                emit requestNextChapter(m_currentChapterId);
+            }
         } else {
             vBar->setValue(vBar->value() + m_scrollArea->viewport()->height() / 2);
         }
     } else {
-        int increment = (m_readingMode == DoublePageSpread) ? 2 : 1;
+        int increment = (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) ? 2 : 1;
         bool isRTL = (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread);
 
         // Logic for "Next" action (advancing reading progress)
@@ -535,9 +617,39 @@ void ReaderWidget::nextPage()
         }
 
         if (atEnd) {
-            emit requestNextChapter(m_currentChapterId);
+            if (m_showingTransition) {
+                if (hasNextChapter()) {
+                    emit requestNextChapter(m_currentChapterId);
+                }
+            } else {
+                // Show Transition
+                m_showingTransition = true;
+
+                // Construct Transition Image
+                QPixmap transition(this->width(), this->height());
+                transition.fill(Qt::black);
+                QPainter p(&transition);
+                p.setPen(Qt::white);
+                p.setFont(QFont("Arial", 20, QFont::Bold));
+
+                QString text;
+                if (hasNextChapter()) {
+                    text = "Finished Chapter\nClick again for next chapter";
+                } else {
+                    text = "End of Series\nNo more chapters";
+                }
+
+                p.drawText(transition.rect(), Qt::AlignCenter, text);
+                p.end();
+
+                m_pagedLabel->setPixmap(transition);
+                m_pagedLabel->adjustSize(); // Ensure label takes size
+            }
             return;
         }
+
+        m_showingTransition = false; // Reset if we moved successfully
+
 
         // Standard Progression
         if (m_currentPageIndex + increment < m_loadedPages.size()) {
@@ -549,7 +661,9 @@ void ReaderWidget::nextPage()
             updateView();
         } else {
             // Fallback for exactly at limit
-            emit requestNextChapter(m_currentChapterId);
+            if (hasNextChapter()) {
+                emit requestNextChapter(m_currentChapterId);
+            }
         }
     }
 }
@@ -557,11 +671,52 @@ void ReaderWidget::nextPage()
 void ReaderWidget::previousPage()
 {
     if (m_readingMode == Webtoon) {
+        int scrollValue = m_scrollArea->verticalScrollBar()->value();
+        if (scrollValue <= 0) {
+            if (hasPreviousChapter()) {
+                emit requestPreviousChapter(m_currentChapterId);
+            }
+            return;
+        }
         m_scrollArea->verticalScrollBar()->setValue(
-            m_scrollArea->verticalScrollBar()->value() - m_scrollArea->viewport()->height() / 2
+            scrollValue - m_scrollArea->viewport()->height() / 2
         );
     } else {
-        int decrement = (m_readingMode == DoublePageSpread) ? 2 : 1;
+        // Check if at first page - request previous chapter
+        if (m_currentPageIndex == 0) {
+            if (m_showingTransition) {
+                 if (hasPreviousChapter()) {
+                     emit requestPreviousChapter(m_currentChapterId);
+                 }
+            } else {
+                 m_showingTransition = true;
+
+                 QPixmap transition(this->width(), this->height());
+                 transition.fill(Qt::black);
+                 QPainter p(&transition);
+                 p.setPen(Qt::white);
+                 p.setFont(QFont("Arial", 20, QFont::Bold));
+
+                 QString text;
+                 if (hasPreviousChapter()) {
+                     text = "Start of Chapter\nClick again for previous chapter";
+                 } else {
+                     text = "First Chapter\nNo previous chapter";
+                 }
+
+                 p.drawText(transition.rect(), Qt::AlignCenter, text);
+                 p.end();
+
+                 m_pagedLabel->setPixmap(transition);
+            }
+            return;
+        }
+
+        m_showingTransition = false;
+
+
+
+        int decrement = (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) ? 2 : 1;
 
         if (m_currentPageIndex - decrement >= 0) {
             m_currentPageIndex -= decrement;
@@ -577,18 +732,28 @@ void ReaderWidget::updateView()
 {
     if (m_readingMode == Webtoon) return;
 
-    if (m_readingMode == DoublePageSpread) {
-        // Double Page Spread (Right-to-Left: [Page N+1] [Page N])
+    if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+        // Double Page Spread
         QImage rightImg, leftImg;
+        // In RTL Double: [Page N+1] [Page N]  (Page N is on Right)
+        // In LTR Double: [Page N] [Page N+1]  (Page N is on Left)
 
-        // Current index is the "Right" page (Page N)
-        if (m_currentPageIndex < m_loadedPages.size()) {
-            rightImg = m_loadedPages[m_currentPageIndex];
-        }
+        bool isRTL = (m_readingMode == DoublePageSpread);
 
-        // Next index is the "Left" page (Page N+1)
-        if (m_currentPageIndex + 1 < m_loadedPages.size()) {
-            leftImg = m_loadedPages[m_currentPageIndex + 1];
+        int firstIndex = m_currentPageIndex;
+        int secondIndex = m_currentPageIndex + 1;
+
+        QImage* firstPosImg = nullptr; // Left-side image in viewer
+        QImage* secondPosImg = nullptr; // Right-side image in viewer
+
+        if (isRTL) {
+             // RTL: Right side is `firstIndex` (N), Left side is `secondIndex` (N+1)
+             if (firstIndex < m_loadedPages.size()) rightImg = m_loadedPages[firstIndex];
+             if (secondIndex < m_loadedPages.size()) leftImg = m_loadedPages[secondIndex];
+        } else {
+             // LTR: Left side is `firstIndex` (N), Right side is `secondIndex` (N+1)
+             if (firstIndex < m_loadedPages.size()) leftImg = m_loadedPages[firstIndex];
+             if (secondIndex < m_loadedPages.size()) rightImg = m_loadedPages[secondIndex];
         }
 
         if (rightImg.isNull() && leftImg.isNull()) return;
@@ -752,4 +917,43 @@ void ReaderWidget::onScaleTypeChanged(int type)
     m_scaleType = static_cast<ScaleType>(type);
     PreferenceManager::instance().setValue("reader/scale_type", type);
     updateView();
+}
+
+bool ReaderWidget::hasNextChapter() const
+{
+    if (m_chapters.isEmpty()) return false;
+
+    // Try to find current index
+    int idx = -1;
+    for (int i = 0; i < m_chapters.size(); ++i) {
+        if (m_chapters[i].id() == m_currentChapterId) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx == -1) return false;
+
+    // We have a next chapter if we are NOT at the last index
+    // Valid next indexes are [idx+1 ... size-1]
+    return idx < (m_chapters.size() - 1);
+}
+
+bool ReaderWidget::hasPreviousChapter() const
+{
+    if (m_chapters.isEmpty()) return false;
+
+    // Try to find current index
+    int idx = -1;
+    for (int i = 0; i < m_chapters.size(); ++i) {
+        if (m_chapters[i].id() == m_currentChapterId) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx == -1) return false;
+
+    // We have a previous chapter if we are NOT at the first index (0)
+    return idx > 0;
 }

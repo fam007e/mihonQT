@@ -102,6 +102,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_readerWidget = new ReaderWidget(m_sourceManager, this);
     connect(m_readerWidget, &ReaderWidget::navigateBack, this, &MainWindow::onBackRequested);
     connect(m_readerWidget, &ReaderWidget::requestNextChapter, this, &MainWindow::onRequestNextChapter);
+    connect(m_readerWidget, &ReaderWidget::requestPreviousChapter, this, &MainWindow::onRequestPreviousChapter);
 
     // 6. Settings View
     m_settingsView = new SettingsView(this);
@@ -500,10 +501,10 @@ void MainWindow::showMangaList(long sourceId)
     }
 }
 
-void MainWindow::showReader(long mangaId, long chapterId)
+void MainWindow::showReader(long mangaId, long chapterId, bool startAtEnd)
 {
     m_rootStack->setCurrentWidget(m_readerWidget);
-    m_readerWidget->loadChapter(mangaId, chapterId);
+    m_readerWidget->loadChapter(mangaId, chapterId, startAtEnd);
 }
 void MainWindow::onLocalMangaPathChanged(const QString& newPath)
 {
@@ -553,5 +554,36 @@ void MainWindow::onRequestNextChapter(long currentChapterId)
         qDebug() << "No next chapter found.";
         // Optional: Show toast "No more chapters"
         // onBackRequested();
+    }
+}
+
+void MainWindow::onRequestPreviousChapter(long currentChapterId)
+{
+    ChapterRepository& chapterRepo = DatabaseManager::instance().chapterRepository();
+    Chapter currentChapter = chapterRepo.getChapterById(currentChapterId);
+
+    if (currentChapter.id() == -1) return;
+
+    QList<Chapter> allChapters = chapterRepo.getChaptersByMangaId(currentChapter.mangaId());
+
+    // Find previous chapter: largest number < current number
+    Chapter previousChapter;
+    double maxNumber = -1.0;
+
+    for (const Chapter& chap : allChapters) {
+        if (chap.chapterNumber() < currentChapter.chapterNumber()) {
+            if (chap.chapterNumber() > maxNumber) {
+                maxNumber = chap.chapterNumber();
+                previousChapter = chap;
+            }
+        }
+    }
+
+    if (previousChapter.id() != -1) {
+        qDebug() << "Auto-loading previous chapter (starting at end):" << previousChapter.name();
+        showReader(previousChapter.mangaId(), previousChapter.id(), true); // startAtEnd = true
+    } else {
+        qDebug() << "No previous chapter found.";
+        // Optional: Show toast "Already at first chapter"
     }
 }

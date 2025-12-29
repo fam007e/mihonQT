@@ -44,12 +44,13 @@ private slots:
     void onLocalMangaPathChanged(const QString& newPath);
     void onNavigationRequested(int index);
     void onRequestNextChapter(long currentChapterId);
+    void onRequestPreviousChapter(long currentChapterId);
 
 private:
     void setupUi();
     void showSourceList(); // New method to show the source list view
     void showMangaList(long sourceId); // New method to show manga list for a source
-    void showReader(long mangaId, long chapterId);
+    void showReader(long mangaId, long chapterId, bool startAtEnd = false);
     void showMangaDetails(const Manga& manga); // [NEW]
 
     // QSqlDatabase m_database; // Removed member

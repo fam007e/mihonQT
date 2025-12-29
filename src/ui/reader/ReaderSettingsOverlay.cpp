@@ -90,7 +90,7 @@ void ReaderSettingsOverlay::setupUi()
     m_readingModeCombo->addItem("Webtoon", 0);
     m_readingModeCombo->addItem("Left to Right", 1);
     m_readingModeCombo->addItem("Right to Left", 2);
-    m_readingModeCombo->addItem("Double Page", 3);
+    m_readingModeCombo->addItem("Double Page", 3); // Smart Double Page (RTL/LTR based on context)
     connect(m_readingModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         emit readingModeChanged(m_readingModeCombo->itemData(index).toInt());
     });
@@ -126,6 +126,9 @@ void ReaderSettingsOverlay::setupUi()
 
 void ReaderSettingsOverlay::setCurrentReadingMode(int mode)
 {
+    // Map specific Double Page LTR (4) to generic Double Page (3) for UI display
+    if (mode == 4) mode = 3;
+
     int index = m_readingModeCombo->findData(mode);
     if (index >= 0) m_readingModeCombo->setCurrentIndex(index);
 }
