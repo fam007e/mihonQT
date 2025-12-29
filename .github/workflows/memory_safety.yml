@@ -37,6 +37,10 @@ jobs:
       run: |
         flawfinder --minlevel=1 --quiet --dataonly src/ || true
 
+    - name: Run CppCheck static analysis
+      run: |
+        cppcheck --enable=all --suppressions-list=.cppcheck --quiet --error-exitcode=0 src/
+
     - name: Run tests (if any)
       # Add a step here to run your test suite
       # For example: ctest --test-dir build

@@ -1,0 +1,21 @@
+# CppCheck requires --suppressions-list=.cppcheck flag
+# Or use: cppcheck --inline-suppr src/
+
+# Qt macro warnings - normal with Qt framework
+unknownMacro
+
+# Missing include warnings - false positives with CMake
+missingInclude
+
+# Shadow function from emit - Qt signal macro false positive
+shadowFunction
+
+# Repository methods can be static - intentional design
+functionStatic
+
+# Unused API functions - will be called later
+unusedFunction
+
+# Style suggestions - non-critical
+useStlAlgorithm
+noExplicitConstructor
