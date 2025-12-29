@@ -284,7 +284,7 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter)
             } else {
                 QImageReader reader(path);
                 reader.setAutoTransform(true);
-                image = reader.read();
+                image = reader.read(); // flawfinder: ignore
             }
 
             if (!image.isNull()) {

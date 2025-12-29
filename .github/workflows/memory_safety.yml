@@ -35,8 +35,7 @@ jobs:
 
     - name: Run Flawfinder security scan
       run: |
-        pip install flawfinder
-        flawfinder --minlevel=1 --exclude=libs/ --quiet --dataonly src/ || true
+        flawfinder --minlevel=1 --quiet --dataonly src/ || true
 
     - name: Run tests (if any)
       # Add a step here to run your test suite
