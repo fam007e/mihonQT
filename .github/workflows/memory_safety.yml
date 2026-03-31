@@ -5,8 +5,22 @@ permissions: read-all
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'vcpkg.json'
+      - 'cmake/**'
+      - 'resources.qrc'
+      - '.github/workflows/memory_safety.yml'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'vcpkg.json'
+      - 'cmake/**'
+      - 'resources.qrc'
+      - '.github/workflows/memory_safety.yml'
 
 jobs:
   build-and-sanitize:
