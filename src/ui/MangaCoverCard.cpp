@@ -33,7 +33,7 @@ MangaCoverCard::MangaCoverCard(const Manga& manga, int unreadCount, QWidget *par
 
 void MangaCoverCard::setupUi()
 {
-    setFixedSize(130, 190);
+    setFixedSize(130, 210); // Updated to accommodate 2:3 ratio (120x180 + margins)
     setFrameShape(QFrame::NoFrame);
     setCursor(Qt::PointingHandCursor);
 
@@ -44,7 +44,7 @@ void MangaCoverCard::setupUi()
 
     // Cover image container
     QWidget *coverContainer = new QWidget(this);
-    coverContainer->setFixedSize(120, 160);
+    coverContainer->setFixedSize(120, 180); // 2:3 aspect ratio
     coverContainer->setStyleSheet(
         "background-color: #3B4252;"
         "border-radius: 8px;"
@@ -52,7 +52,7 @@ void MangaCoverCard::setupUi()
 
     // Cover label (inside container)
     m_coverLabel = new QLabel(coverContainer);
-    m_coverLabel->setFixedSize(120, 160);
+    m_coverLabel->setFixedSize(120, 180);
     m_coverLabel->setAlignment(Qt::AlignCenter);
     m_coverLabel->setScaledContents(true);
     m_coverLabel->setStyleSheet("border-radius: 8px;");
@@ -61,30 +61,31 @@ void MangaCoverCard::setupUi()
     m_titleLabel = new QLabel(m_manga.title(), coverContainer);
     m_titleLabel->setWordWrap(true);
     m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignBottom);
-    m_titleLabel->setFixedSize(120, 50);
-    m_titleLabel->move(0, 110);
+    m_titleLabel->setFixedSize(120, 60);
+    m_titleLabel->move(0, 120);
     m_titleLabel->setStyleSheet(
         "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        "   stop:0 transparent, stop:0.3 rgba(0,0,0,0.7), stop:1 rgba(0,0,0,0.9));"
+        "   stop:0 transparent, stop:0.3 rgba(0,0,0,0.66), stop:1 rgba(0,0,0,0.8));" // Matching Compose alpha
         "color: white;"
         "font-size: 11px;"
         "font-weight: bold;"
-        "padding: 4px 6px;"
+        "padding: 6px 6px;"
         "border-bottom-left-radius: 8px;"
         "border-bottom-right-radius: 8px;"
     );
 
-    // Unread badge (top right corner)
+    // Unread badge (top left corner)
     m_badgeLabel = new QLabel(coverContainer);
     m_badgeLabel->setAlignment(Qt::AlignCenter);
     m_badgeLabel->setFixedSize(28, 20);
-    m_badgeLabel->move(88, 4);
+    m_badgeLabel->move(0, 0); // Top Left
     m_badgeLabel->setStyleSheet(
         "background-color: #88C0D0;"
         "color: #2E3440;"
         "font-size: 11px;"
         "font-weight: bold;"
-        "border-radius: 4px;"
+        "border-top-left-radius: 8px;" // Match card corner
+        "border-bottom-right-radius: 8px;"
         "padding: 2px 4px;"
     );
     updateBadge();
@@ -114,7 +115,7 @@ void MangaCoverCard::setUnreadCount(int count)
 void MangaCoverCard::setCoverImage(const QPixmap& pixmap)
 {
     if (!pixmap.isNull()) {
-        m_coverLabel->setPixmap(pixmap.scaled(120, 160, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+        m_coverLabel->setPixmap(pixmap.scaled(120, 180, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
     }
 }
 

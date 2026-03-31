@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QGridLayout>
 #include <QScrollArea>
+#include <QPushButton>
 #include "model/Manga.h"
 
 class MangaCoverCard;
@@ -33,6 +34,10 @@ private:
     QGridLayout *m_gridLayout;
     QList<MangaCoverCard*> m_cards;
     QList<Manga> m_mangaList;
+
+    QPushButton *m_searchBtn;
+    QPushButton *m_filterBtn;
+    QPushButton *m_moreBtn;
 };
 
 #endif // LIBRARYVIEW_H

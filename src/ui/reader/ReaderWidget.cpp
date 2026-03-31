@@ -852,15 +852,21 @@ void ReaderWidget::updateView()
 void ReaderWidget::saveReadingProgress()
 {
     if (m_currentChapterId > 0) {
-        // Save to history
-        long now = QDateTime::currentSecsSinceEpoch();
-        m_historyRepo->upsertHistory(m_currentChapterId, now, 0);
+        // Save to history if NOT in incognito mode
+        bool incognito = PreferenceManager::instance().value("security/incognito", false).toBool();
+        if (!incognito) {
+            long now = QDateTime::currentSecsSinceEpoch();
+            m_historyRepo->upsertHistory(m_currentChapterId, now, 0);
+        }
 
-        // Update chapter's last_page_read
-        Chapter chapter = m_chapterRepo->getChapterById(m_currentChapterId);
-        if (chapter.id() != -1) {
-            chapter.setLastPageRead(m_currentPageIndex);
-            m_chapterRepo->updateChapter(chapter);
+        // Update chapter's last_page_read (even in incognito? Mihon Android updates local progress but not global history)
+        // Usually incognito means "don't save anything that reveals what I read".
+        if (!incognito) {
+            Chapter chapter = m_chapterRepo->getChapterById(m_currentChapterId);
+            if (chapter.id() != -1) {
+                chapter.setLastPageRead(m_currentPageIndex);
+                m_chapterRepo->updateChapter(chapter);
+            }
         }
 
         emit chapterClosed(m_currentChapterId, m_currentPageIndex);

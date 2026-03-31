@@ -88,11 +88,11 @@ void ThemeManager::applyCatppuccinFrappe()
 void ThemeManager::applyNordDark()
 {
     QPalette p;
-    p.setColor(QPalette::Window, m_isAmoled ? Qt::black : QColor("#2e3440"));
+    p.setColor(QPalette::Window, m_isAmoled ? Qt::black : QColor("#1f2430")); // Darkened Nord background
     p.setColor(QPalette::WindowText, QColor("#d8dee9"));
-    p.setColor(QPalette::Base, QColor("#3b4252"));
-    p.setColor(QPalette::AlternateBase, QColor("#434c5e"));
-    p.setColor(QPalette::ToolTipBase, QColor("#3b4252"));
+    p.setColor(QPalette::Base, QColor("#29303d")); // Darkened Nord base
+    p.setColor(QPalette::AlternateBase, QColor("#3b4252"));
+    p.setColor(QPalette::ToolTipBase, QColor("#29303d"));
     p.setColor(QPalette::ToolTipText, QColor("#d8dee9"));
     p.setColor(QPalette::Text, QColor("#eceff4"));
     p.setColor(QPalette::Button, QColor("#434c5e"));
@@ -100,7 +100,7 @@ void ThemeManager::applyNordDark()
     p.setColor(QPalette::BrightText, QColor("#88c0d0"));
     p.setColor(QPalette::Link, QColor("#81a1c1"));
     p.setColor(QPalette::Highlight, QColor("#88c0d0"));
-    p.setColor(QPalette::HighlightedText, QColor("#2e3440"));
+    p.setColor(QPalette::HighlightedText, QColor("#1f2430"));
     qApp->setPalette(p);
 }
 

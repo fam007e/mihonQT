@@ -16,13 +16,21 @@
 #include "ui/SettingsView.h"
 #include "ui/ThemeManager.h"
 #include "ui/SidebarWidget.h"
+#include "ui/MoreView.h"
+#include "ui/ExtensionManagerView.h"
+#include "ui/DownloadView.h"
+#include "ui/StatisticsView.h"
+#include "ui/CategoryEditDialog.h"
 
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QDebug>
 #include <QVBoxLayout>
 #include <QSettings>
 #include <QDateTime>
+#include "config/PreferenceManager.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -90,7 +98,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(m_libraryView, &LibraryView::mangaSelected, this, &MainWindow::onMangaSelected);
     connect(m_libraryView, &LibraryView::backRequested, this, &MainWindow::onBackRequested);
-    connect(m_updatesView, &UpdatesView::chapterSelected, this, &MainWindow::onChapterSelected);
+    connect(m_updatesView, &UpdatesView::chapterSelected, this, [this](long mangaId, long chapterId) {
+        showReader(mangaId, chapterId);
+    });
+    connect(m_historyView, &HistoryView::resumeReading, this, [this](long mangaId, long chapterId) {
+        showReader(mangaId, chapterId);
+    });
 
 
     m_mangaDetailsView = new MangaDetailsView(this);
@@ -104,10 +117,36 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_readerWidget, &ReaderWidget::requestNextChapter, this, &MainWindow::onRequestNextChapter);
     connect(m_readerWidget, &ReaderWidget::requestPreviousChapter, this, &MainWindow::onRequestPreviousChapter);
 
-    // 6. Settings View
+    // 6. Settings and More Views
+    m_moreView = new MoreView(this);
     m_settingsView = new SettingsView(this);
+    m_extensionManagerView = new ExtensionManagerView(this);
+    m_downloadView = new DownloadView(this);
+    m_statisticsView = new StatisticsView(this);
+
+    connect(m_moreView, &MoreView::settingsRequested, this, [this]() {
+        if (m_contentStack->currentIndex() < 5) {
+            m_lastContentIndex = m_contentStack->currentIndex();
+        }
+        m_contentStack->setCurrentWidget(m_settingsView);
+    });
+    connect(m_moreView, &MoreView::extensionsRequested, this, &MainWindow::onExtensionsRequested);
+    connect(m_moreView, &MoreView::downloadsRequested, this, &MainWindow::onDownloadQueueRequested);
+    connect(m_moreView, &MoreView::categoriesRequested, this, &MainWindow::onCategoriesRequested);
+    connect(m_moreView, &MoreView::statisticsRequested, this, &MainWindow::onStatisticsRequested);
+    connect(m_moreView, &MoreView::dataStorageRequested, this, &MainWindow::onDataStorageRequested);
+    connect(m_moreView, &MoreView::aboutRequested, this, &MainWindow::onAboutRequested);
+    connect(m_moreView, &MoreView::helpRequested, this, &MainWindow::onHelpRequested);
+    connect(m_moreView, &MoreView::incognitoChanged, this, &MainWindow::onIncognitoChanged);
+    connect(m_moreView, &MoreView::downloadedOnlyChanged, this, &MainWindow::onDownloadedOnlyChanged);
+    connect(m_moreView, &MoreView::backRequested, this, &MainWindow::onBackRequested);
+
+    m_extensionsView = new ExtensionsView(this);
+    connect(m_extensionsView, &ExtensionsView::backRequested, this, &MainWindow::onBackRequested);
+    
     connect(m_settingsView, &SettingsView::backRequested, this, &MainWindow::onBackRequested);
-connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow::onLocalMangaPathChanged);
+    connect(m_settingsView, &SettingsView::incognitoChanged, this, &MainWindow::onIncognitoChanged);
+    connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow::onLocalMangaPathChanged);
     connect(m_settingsView, &SettingsView::readingModeChanged, this, [this](int index) {
         // 0: Webtoon, 1: L2R, 2: R2L
         ReaderWidget::ReadingMode mode;
@@ -119,6 +158,10 @@ connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow:
         }
         m_readerWidget->setReadingMode(mode);
     });
+
+    connect(m_statisticsView, &StatisticsView::backRequested, this, &MainWindow::onBackRequested);
+    connect(m_extensionManagerView, &ExtensionManagerView::backRequested, this, &MainWindow::onBackRequested);
+    connect(m_downloadView, &DownloadView::backRequested, this, &MainWindow::onBackRequested);
 
     // --- Setup Sidebar Navigation ---
     m_sidebar = new SidebarWidget(this);
@@ -132,15 +175,21 @@ connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow:
     // 1: Updates
     // 2: History
     // 3: Browse
-    // 4: Settings
-    // 5: Details (Manga Details)
+    // 4: More
+    // 5: Settings
+    // 6: Details (Manga Details)
 
     m_contentStack->addWidget(m_libraryView);       // 0
     m_contentStack->addWidget(m_updatesView);       // 1
     m_contentStack->addWidget(m_historyView);       // 2
     m_contentStack->addWidget(m_browseStack);       // 3 (Browse acts as container for Source List/Manga List)
-    m_contentStack->addWidget(m_settingsView);      // 4
-    m_contentStack->addWidget(m_mangaDetailsView);  // 5
+    m_contentStack->addWidget(m_moreView);          // 4
+    m_contentStack->addWidget(m_settingsView);      // 5
+    m_contentStack->addWidget(m_mangaDetailsView);  // 6
+    m_contentStack->addWidget(m_extensionsView);    // 7
+    m_contentStack->addWidget(m_extensionManagerView); // 8
+    m_contentStack->addWidget(m_downloadView);      // 9
+    m_contentStack->addWidget(m_statisticsView);    // 10
 
     // Dashboard Layout (Sidebar + Content)
     QHBoxLayout *dashboardLayout = new QHBoxLayout(m_dashboardWidget);
@@ -189,76 +238,6 @@ void MainWindow::setupUi()
     // Set the window title
     setWindowTitle("MihonQT");
     resize(1280, 720);
-
-    // --- Toolbar & Hamburger Menu ---
-    m_toolBar = addToolBar("Main Toolbar");
-    m_toolBar->setMovable(false);
-
-    // Hamburger Action (Icon would be better, using text for now)
-    m_hamburgerAction = new QAction("Menu", this);
-    // m_hamburgerAction->setIcon(QIcon(":/icons/menu.png")); // TODO: Add icon
-    m_toolBar->addAction(m_hamburgerAction);
-
-    // Spacer to push other items to right if needed
-    // QWidget* spacer = new QWidget();
-    // spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    // m_toolBar->addWidget(spacer);
-
-    // Only show toolbar if needed, or customize per view.
-    // Ideally, for desktop, we might not need a top toolbar if we have a sidebar.
-    // Or we keep it for global actions.
-    m_toolBar->hide(); // Hiding for now to clean up UI, can re-enable if we want Breadcrumbs or Search
-
-    // Hamburger Menu
-    m_hamburgerMenu = new QMenu(this);
-
-    // 1. Toggles
-    m_downloadedOnlyAction = m_hamburgerMenu->addAction("Downloaded only");
-    m_downloadedOnlyAction->setCheckable(true);
-
-    m_incognitoModeAction = m_hamburgerMenu->addAction("Incognito mode");
-    m_incognitoModeAction->setCheckable(true);
-
-    m_hamburgerMenu->addSeparator();
-
-    // 2. Shortcuts
-    m_downloadQueueAction = m_hamburgerMenu->addAction("Download queue");
-    m_categoriesAction = m_hamburgerMenu->addAction("Categories");
-    m_statsAction = m_hamburgerMenu->addAction("Statistics");
-
-    m_hamburgerMenu->addSeparator();
-
-    // 3. Settings & About
-    m_settingsAction = m_hamburgerMenu->addAction("Settings");
-    m_aboutAction = m_hamburgerMenu->addAction("About");
-
-    // Connect Hamburger Action to show menu
-    connect(m_hamburgerAction, &QAction::triggered, this, [this]() {
-        m_hamburgerMenu->exec(QCursor::pos());
-    });
-
-    // Connect Menu Actions (Placeholders for now)
-    connect(m_downloadedOnlyAction, &QAction::toggled, this, [](bool checked) {
-        qDebug() << "Downloaded Only:" << checked;
-    });
-    connect(m_incognitoModeAction, &QAction::toggled, this, [](bool checked) {
-        qDebug() << "Incognito Mode:" << checked;
-    });
-    connect(m_downloadQueueAction, &QAction::triggered, this, []() {
-        QMessageBox::information(nullptr, "Info", "Download Queue not implemented yet.");
-    });
-    connect(m_categoriesAction, &QAction::triggered, this, []() {
-        QMessageBox::information(nullptr, "Info", "Categories not implemented yet.");
-    });
-    connect(m_statsAction, &QAction::triggered, this, []() {
-        QMessageBox::information(nullptr, "Info", "Statistics not implemented yet.");
-    });
-    connect(m_settingsAction, &QAction::triggered, this, [this]() {
-        onNavigationRequested(4); // Navigate to Settings
-    });
-    connect(m_aboutAction, &QAction::triggered, this, [this]() {
-        QMessageBox::about(this, "About MihonQT", "MihonQT v0.1\nA Qt port of the Mihon manga reader.");
-    });
 
     // Create menu bar (Keep existing menus)
     QMenu *fileMenu = menuBar()->addMenu("&File");
@@ -422,7 +401,7 @@ void MainWindow::onNavigationRequested(int index)
     // 1: Updates
     // 2: History
     // 3: Browse
-    // 4: Settings
+    // 4: More
 
     int stackIndex = -1;
     switch (index) {
@@ -430,7 +409,7 @@ void MainWindow::onNavigationRequested(int index)
         case 1: stackIndex = 1; break; // Updates
         case 2: stackIndex = 2; break; // History
         case 3: stackIndex = 3; break; // Browse
-        case 4: stackIndex = 4; break; // Settings
+        case 4: stackIndex = 4; break; // More
     }
 
     if (stackIndex != -1) {
@@ -438,12 +417,89 @@ void MainWindow::onNavigationRequested(int index)
             m_libraryView->refreshLibrary();
         }
 
-        // Don't track Details (5) as a "base" navigation point
-        if (m_contentStack->currentIndex() != 5) {
-            m_lastContentIndex = m_contentStack->currentIndex();
+        // Don't track Details (6), Settings (5), Extensions (7/8), Downloads (9), or Stats (10) as a "base" navigation point
+        int currentIdx = m_contentStack->currentIndex();
+        if (currentIdx < 5) {
+            m_lastContentIndex = currentIdx;
         }
 
         m_contentStack->setCurrentIndex(stackIndex);
+    }
+}
+
+void MainWindow::onExtensionsRequested()
+{
+    if (m_contentStack->currentIndex() < 5) {
+        m_lastContentIndex = m_contentStack->currentIndex();
+    }
+    m_contentStack->setCurrentWidget(m_extensionManagerView);
+}
+
+void MainWindow::onDownloadQueueRequested()
+{
+    if (m_contentStack->currentIndex() < 5) {
+        m_lastContentIndex = m_contentStack->currentIndex();
+    }
+    m_downloadView->refreshQueue();
+    m_contentStack->setCurrentWidget(m_downloadView);
+}
+
+void MainWindow::onCategoriesRequested()
+{
+    CategoryEditDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        m_libraryView->refreshLibrary();
+    }
+}
+
+void MainWindow::onStatisticsRequested()
+{
+    if (m_contentStack->currentIndex() < 5) {
+        m_lastContentIndex = m_contentStack->currentIndex();
+    }
+    m_statisticsView->refreshStats();
+    m_contentStack->setCurrentWidget(m_statisticsView);
+}
+
+void MainWindow::onDataStorageRequested()
+{
+    if (m_contentStack->currentIndex() < 5) {
+        m_lastContentIndex = m_contentStack->currentIndex();
+    }
+    m_settingsView->selectCategory("Data & Storage");
+    m_contentStack->setCurrentWidget(m_settingsView);
+}
+
+void MainWindow::onAboutRequested()
+{
+    if (m_contentStack->currentIndex() < 5) {
+        m_lastContentIndex = m_contentStack->currentIndex();
+    }
+    m_settingsView->selectCategory("About");
+    m_contentStack->setCurrentWidget(m_settingsView);
+}
+
+void MainWindow::onHelpRequested()
+{
+    QDesktopServices::openUrl(QUrl("https://fam007e.github.io/mihonQT/FAQ.html"));
+}
+void MainWindow::onIncognitoChanged(bool enabled)
+{
+    PreferenceManager::instance().setValue("security/incognito", enabled);
+    qDebug() << "Incognito Mode:" << enabled;
+    m_moreView->updatePreferences();
+    m_settingsView->updatePreferences();
+}
+
+void MainWindow::onDownloadedOnlyChanged(bool enabled)
+{
+    PreferenceManager::instance().setValue("downloadedOnly", enabled);
+    qDebug() << "Downloaded Only Mode:" << enabled;
+    m_moreView->updatePreferences();
+    
+    m_libraryView->refreshLibrary();
+    if (m_contentStack->currentIndex() == 3 && m_browseStack->currentWidget() == m_sourceBrowseView) {
+        // Refresh browser view if it's open
     }
 }
 
@@ -454,28 +510,23 @@ void MainWindow::onBackRequested()
         m_rootStack->setCurrentWidget(m_dashboardWidget);
     } else {
         // We are in Dashboard. Check Content Stack.
-        QWidget* currentContent = m_contentStack->currentWidget();
+        int currentIdx = m_contentStack->currentIndex();
 
-        if (currentContent == m_mangaDetailsView) {
-            // Back from Details -> where we came from (Library or Browse)
+        if (currentIdx >= 5) {
+            // Back from sub-views (Details, Settings, Extensions, Downloads, Stats)
             m_contentStack->setCurrentIndex(m_lastContentIndex);
-        } else if (currentContent == m_browseStack) {
+        } else if (currentIdx == 3) {
             // Inside Browse: Handle Browse Stack back navigation
             if (m_browseStack->currentWidget() == m_sourceBrowseView) {
                 showSourceList();
-            } else {
-                // If at root of browse (Source List), maybe go to Library?
-                // Standard Android behavior: Back at root tab -> Exit app (or go to default tab)
-                // For Desktop, maybe do nothing.
             }
         }
-        // Else: Updates, History, Settings, Library -> Do nothing (or exit app logic)
     }
 }
 
 void MainWindow::showMangaDetails(const Manga& manga)
 {
-    if (m_contentStack->currentIndex() != 5) {
+    if (m_contentStack->currentIndex() < 5) {
         m_lastContentIndex = m_contentStack->currentIndex();
     }
     m_mangaDetailsView->setManga(manga);

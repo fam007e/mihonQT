@@ -17,6 +17,12 @@ public:
     explicit DownloadView(QWidget *parent = nullptr);
     void refreshQueue();
 
+signals:
+    void backRequested();
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override;
+
 private slots:
     void onDownloadQueued(const DownloadItem& item);
     void onDownloadProgress(long chapterId, int current, int total);

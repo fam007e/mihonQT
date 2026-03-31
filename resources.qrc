@@ -1,5 +1,22 @@
 <!DOCTYPE RCC><RCC version="1.0">
 <qresource prefix="/">
     <file alias="database/schema.sql">src/database/schema.sql</file>
+    <file alias="icons/library.svg">src/icons/library.svg</file>
+    <file alias="icons/updates.svg">src/icons/updates.svg</file>
+    <file alias="icons/history.svg">src/icons/history.svg</file>
+    <file alias="icons/browse.svg">src/icons/browse.svg</file>
+    <file alias="icons/more.svg">src/icons/more.svg</file>
+    <file alias="icons/search.svg">src/icons/search.svg</file>
+    <file alias="icons/filter.svg">src/icons/filter.svg</file>
+    <file alias="icons/public.svg">src/icons/public.svg</file>
+    <file alias="icons/downloads.svg">src/icons/downloads.svg</file>
+    <file alias="icons/categories.svg">src/icons/categories.svg</file>
+    <file alias="icons/statistics.svg">src/icons/statistics.svg</file>
+    <file alias="icons/settings.svg">src/icons/settings.svg</file>
+    <file alias="icons/about.svg">src/icons/about.svg</file>
+    <file alias="icons/help.svg">src/icons/help.svg</file>
+    <file alias="icons/extensions.svg">src/icons/extensions.svg</file>
+    <file alias="icons/toggle_off.svg">src/icons/toggle_off.svg</file>
+    <file alias="icons/toggle_on.svg">src/icons/toggle_on.svg</file>
 </qresource>
 </RCC>

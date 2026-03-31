@@ -6,21 +6,22 @@
 #include <QJsonObject>
 #include <QJsonArray> // Needed for QJsonArray
 #include <QVariant>
-#include <QJSValueIterator> // Potentially useful for converting QJSValue to QVariantMap/List
+#include <QJSValueIterator> 
+#include <QNetworkCookieJar>
+#include <QApplication>
+#include "../ui/WebViewDialog.h"
 
-NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) // Receive QJSEngine
+NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) 
     : QObject(parent)
-    , m_engine(engine) // Store engine reference
+    , m_engine(engine) 
 {
-    // It's generally better to connect finished to a slot for asynchronous processing
-    // but here we use QEventLoop::exec() for synchronous handling
-    // connect(&m_networkManager, &QNetworkAccessManager::finished, this, &NetworkAccessManager::onReplyFinished);
+    m_networkManager.setCookieJar(new QNetworkCookieJar(this));
 }
 
 QJSValue NetworkAccessManager::get(const QString& url)
 {
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    QNetworkRequest request = QNetworkRequest(QUrl(url));
+    request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
     QNetworkReply *reply = m_networkManager.get(request);
 
     QEventLoop loop;
@@ -46,6 +47,29 @@ QJSValue NetworkAccessManager::get(const QString& url)
             result = m_engine->toScriptValue(QString(data)); // If JSON parsing fails, return as plain string
         }
     } else {
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
+            qWarning() << "Cloudflare GET challenge detected! Opening WebView Interceptor...";
+            
+            bool success = false;
+            // Ensure dialog runs on main thread
+            QMetaObject::invokeMethod(qApp, [this, url, &success]() {
+                WebViewDialog dialog(url);
+                dialog.exec();
+                
+                QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
+                if (!cookies.isEmpty()) {
+                    m_networkManager.cookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+                    success = true;
+                }
+            }, Qt::BlockingQueuedConnection);
+
+            if (success) {
+                reply->deleteLater();
+                return this->get(url); // Retry the request with the new cookies
+            }
+        }
+
         qWarning() << "Network GET request failed:" << reply->errorString();
         QJsonObject errorObject;
         errorObject["error"] = reply->errorString();
@@ -58,7 +82,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
 
 QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
 {
-    QNetworkRequest request(url);
+    QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); // Example: assuming JSON post
     QNetworkReply *reply = m_networkManager.post(request, data);
 
@@ -83,6 +107,26 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
             result = m_engine->toScriptValue(QString(responseData));
         }
     } else {
+        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
+            qWarning() << "Cloudflare POST challenge detected! Opening WebView Interceptor...";
+            bool success = false;
+            QMetaObject::invokeMethod(qApp, [this, url, &success]() {
+                WebViewDialog dialog(url);
+                dialog.exec();
+                QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
+                if (!cookies.isEmpty()) {
+                    m_networkManager.cookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+                    success = true;
+                }
+            }, Qt::BlockingQueuedConnection);
+
+            if (success) {
+                reply->deleteLater();
+                return this->post(url, data); // Retry
+            }
+        }
+
         qWarning() << "Network POST request failed:" << reply->errorString();
         QJsonObject errorObject;
         errorObject["error"] = reply->errorString();

@@ -3,7 +3,7 @@
 
 #include <QWidget>
 #include <QVBoxLayout>
-#include <QPushButton>
+#include <QToolButton>
 
 class SidebarWidget : public QWidget
 {
@@ -17,14 +17,14 @@ signals:
 
 private:
     QVBoxLayout *m_layout;
-    QPushButton *m_libraryBtn;
-    QPushButton *m_updatesBtn;
-    QPushButton *m_historyBtn;
-    QPushButton *m_browseBtn;
-    QPushButton *m_settingsBtn;
+    QToolButton *m_libraryBtn;
+    QToolButton *m_updatesBtn;
+    QToolButton *m_historyBtn;
+    QToolButton *m_browseBtn;
+    QToolButton *m_moreBtn;
 
     void setupUi();
-    QPushButton* createNavButton(const QString &text, const QString &iconName, int index);
+    QToolButton* createNavButton(const QString &text, const QString &iconName, int index);
 };
 
 #endif // SIDEBARWIDGET_H

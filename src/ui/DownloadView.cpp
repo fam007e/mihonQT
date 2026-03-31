@@ -1,5 +1,6 @@
 #include "DownloadView.h"
 #include <QMessageBox>
+#include <QMouseEvent>
 
 DownloadView::DownloadView(QWidget *parent)
     : QWidget(parent)
@@ -149,5 +150,14 @@ void DownloadView::onCancelAllClicked()
     if (reply == QMessageBox::Yes) {
         DownloadManager::instance().cancelAllDownloads();
         refreshQueue();
+    }
+}
+
+void DownloadView::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::RightButton) {
+        emit backRequested();
+    } else {
+        QWidget::mousePressEvent(event);
     }
 }

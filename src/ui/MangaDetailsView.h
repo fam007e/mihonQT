@@ -36,6 +36,7 @@ private:
     QLabel *m_descriptionLabel;
     QPushButton *m_libraryButton;
     QPushButton *m_editCategoriesButton; // New button
+    QPushButton *m_openWebViewButton; // WebView button
     QListWidget *m_chapterListWidget;
 };
 

@@ -27,6 +27,9 @@ private slots:
 private:
     QNetworkAccessManager m_networkManager;
     QJSEngine* m_engine; // Store the QJSEngine reference
+    QString m_userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"; // Default User-Agent matching Chromium
+
+    void handleCloudflareIntercept(const QString& url);
 };
 
 #endif // NETWORKACCESSMANAGER_H

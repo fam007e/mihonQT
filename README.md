@@ -1,66 +1,50 @@
 # MihonQT
 
-MihonQT is a desktop manga reader built with C++ and the Qt framework, inspired by the popular Android application [Mihon](https://mihon.app/). This project is in its early stages, with many features yet to be implemented. Contributions are welcome!
+MihonQT is a cross-platform desktop manga reader built with C++ and Qt 6, inspired by the popular [Mihon](https://mihon.app/) (formerly Tachiyomi) Android application.
 
-## 🚧 Project Status: Pre-Alpha
+## ✨ Features
 
-This project is currently a work-in-progress. The foundational architecture is in place, but many user-facing features are missing.
+- **📚 Library Management:** Organize your manga with categories and track your reading progress.
+- **🌐 Extension System:** Add third-party repositories to browse and install extensions for online sources.
+- **🚀 Fast Reader:** Support for local directories and `.cbz` archives with smooth vertical (Webtoon) and paged reading modes.
+- **🕶️ Incognito Mode:** Pause history tracking and reading progress with a single toggle.
+- **📊 Statistics:** Get insights into your reading habits with a dedicated statistics dashboard.
+- **📥 Download Manager:** Queue chapters for offline reading with a robust, multi-threaded download manager.
+- **🎨 Dynamic Theming:** Beautiful, theme-aware UI with support for Nord, Catppuccin, Tokyo Night, and more.
 
-## ✨ Features (Planned & Implemented)
-
--   [x] Basic UI structure with a main window and views for Library, Sources, and Settings.
--   [x] SQLite database for managing manga and chapter information.
--   [x] Polymorphic source architecture for fetching manga from different origins.
--   [x] Support for local manga (`.cbz` format) via `LocalSource`.
--   [x] Extensible Javascript source support for online sources.
--   [ ] Fully implemented reader view.
--   [ ] Comprehensive error handling and user feedback.
--   [ ] Advanced library management (filtering, sorting, categories).
--   [ ] Settings persistence and configuration.
-
-## 🛠️ Building from Source
+## 🚀 Getting Started
 
 ### Prerequisites
 
--   C++ Compiler (g++, Clang, MSVC)
--   [CMake](https://cmake.org/) (version 3.16 or higher)
--   [Qt 6](https://www.qt.io/download-qt-installer) (Core, Gui, Widgets, Sql, Concurrent, Quick, Qml)
+-   **CMake** (3.16+)
+-   **Qt 6** (Core, Gui, Widgets, Network, Sql, Concurrent)
+-   **QuaZip** (for `.cbz` support)
 
-On Debian-based systems (like Ubuntu), you can install the dependencies with:
+### Building
 
 ```bash
-sudo apt-get update
-sudo apt-get install build-essential cmake qt6-base-dev
+cmake -B build
+cmake --build build
+./build/MihonQT
 ```
 
-### Build Steps
+## 🔒 Security & Privacy
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/mihonQT.git
-    cd mihonQT
-    ```
+MihonQT is designed with privacy in mind.
+- **No Tracking:** We do not collect any personal data.
+- **Incognito Mode:** Easily pause tracking when needed.
+- **Local First:** Your database and settings stay on your machine.
 
-2.  **Configure the project using CMake:**
-    ```bash
-    cmake -B build -S .
-    ```
+For a detailed security analysis, see [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
 
-3.  **Build the project:**
-    ```bash
-    cmake --build build
-    ```
+## 🗺️ Roadmap
 
-4.  **Run the application:**
-    The executable will be located in the `build` directory.
-    ```bash
-    ./build/MihonQT
-    ```
+See [ROADMAP.md](ROADMAP.md) for our progress and planned features.
 
 ## 🤝 Contributing
 
-This is a community-driven project, and we welcome contributions of all kinds. Please see the (future) `CONTRIBUTING.md` file for detailed guidelines on how to get involved.
+Contributions are welcome! Please check out our [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

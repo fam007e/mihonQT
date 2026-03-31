@@ -18,12 +18,19 @@ class SettingsView : public QWidget
     Q_OBJECT
 public:
     explicit SettingsView(QWidget *parent = nullptr);
+    void selectCategory(const QString& categoryName);
+
+public slots:
+    void updatePreferences();
+    void updateThemeColors();
 
 signals:
     void backRequested();
     void readingModeChanged(int mode);
     void localMangaPathChanged(const QString& newPath);
     void dataDirectoryChanged(const QString& newPath);
+    void incognitoChanged(bool enabled);
+    void downloadedOnlyChanged(bool enabled);
 
 
 
@@ -111,6 +118,13 @@ private:
     QPushButton *m_clearCookiesButton;
     QLineEdit *mDataDirectoryEdit;
     QPushButton *mDataDirectoryButton;
+    // Security widgets
+    QCheckBox *m_incognitoCheckBox;
+    QCheckBox *m_secureScreenCheckBox;
+
+    // Advanced widgets
+    QPushButton *m_clearDbButton;
+    QPushButton *m_dumpLogsButton;
 };
 
 

@@ -6,8 +6,6 @@
 #include <QStackedWidget> // For managing different views
 #include <QJSEngine> // Include QJSEngine
 #include <QTabWidget>
-#include <QToolBar>
-#include <QAction>
 #include <QMenu>
 
 #include "ui/reader/ReaderWidget.h"
@@ -21,12 +19,18 @@
 #include "ui/SourceBrowseView.h"
 #include "ui/MangaDetailsView.h"
 #include "ui/SettingsView.h"
+#include "ui/ExtensionsView.h"
 
 // Forward declarations for new UI components
 class SidebarWidget;
 class UpdatesView;
 class HistoryView;
 class LibraryView;
+class MoreView;
+class ExtensionManagerView;
+class DownloadView;
+class CategoryEditDialog;
+class StatisticsView;
 
 class MainWindow : public QMainWindow
 {
@@ -45,6 +49,15 @@ private slots:
     void onNavigationRequested(int index);
     void onRequestNextChapter(long currentChapterId);
     void onRequestPreviousChapter(long currentChapterId);
+    void onExtensionsRequested();
+    void onDownloadQueueRequested();
+    void onCategoriesRequested();
+    void onStatisticsRequested();
+    void onDataStorageRequested();
+    void onAboutRequested();
+    void onHelpRequested();
+    void onIncognitoChanged(bool enabled);
+    void onDownloadedOnlyChanged(bool enabled);
 
 private:
     void setupUi();
@@ -83,23 +96,17 @@ private:
     SourceBrowseView *m_sourceBrowseView;
 
     MangaDetailsView *m_mangaDetailsView;
-    SettingsView *m_settingsView;
+    MoreView *m_moreView;
+    SettingsView *m_settingsView; // [RE-ADDED]
+    ExtensionsView *m_extensionsView;
+    ExtensionManagerView *m_extensionManagerView; // [NEW]
+    DownloadView *m_downloadView; // [NEW]
+    StatisticsView *m_statisticsView; // [NEW]
 
     ReaderWidget *m_readerWidget;
 
     // Main Window Widgets
-    QToolBar *m_toolBar;
-    QAction *m_hamburgerAction;
-    QMenu *m_hamburgerMenu;
-
-    // Menu Actions
-    QAction *m_downloadedOnlyAction;
-    QAction *m_incognitoModeAction;
-    QAction *m_downloadQueueAction;
-    QAction *m_categoriesAction;
-    QAction *m_statsAction;
-    QAction *m_settingsAction;
-    QAction *m_aboutAction;
+    // Toolbar removed for new UI
 };
 
 #endif // MAINWINDOW_H

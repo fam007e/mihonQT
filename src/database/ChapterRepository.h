@@ -19,6 +19,8 @@ public:
     Chapter getChapterById(long id);
     QList<Chapter> getChaptersByMangaId(long mangaId);
     int getUnreadCountByMangaId(long mangaId); // NEW
+    int getTotalChapterCount();
+    int getReadChapterCount();
     bool deleteChapter(long id);
 
 private:

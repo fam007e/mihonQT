@@ -9,7 +9,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 COMPONENTS Core Gui Widgets Sql Concurrent Quick Qml Core5Compat REQUIRED) # Add Core5Compat
+find_package(Qt6 COMPONENTS Core Gui Widgets Sql Concurrent Quick Qml Core5Compat WebEngineWidgets WebEngineCore REQUIRED) # Add Core5Compat and WebEngine
 
 # --- QuaZip ---
 set(QUAZIP_QT_MAJOR_VERSION 6 CACHE STRING "Qt version to use (6 or 5)" FORCE)
@@ -42,6 +42,8 @@ add_executable(MihonQT
     src/ui/SettingsView.cpp
     src/ui/CategoryEditDialog.cpp
     src/ui/SidebarWidget.cpp
+    src/ui/MoreView.cpp
+    src/ui/WebViewDialog.cpp
     src/ui/UpdatesView.cpp
     src/ui/HistoryView.cpp
     src/ui/LibraryView.cpp
@@ -56,11 +58,16 @@ add_executable(MihonQT
     src/model/Category.cpp
     src/database/CategoryRepository.cpp
     src/database/HistoryRepository.cpp
+    src/source/ExtensionManager.cpp
+    src/source/ExtensionRepoManager.cpp
+    src/ui/ExtensionsView.cpp
+    src/ui/ExtensionManagerView.cpp
+    src/ui/StatisticsView.cpp
     resources.qrc
 )
 
 # --- Link Libraries ---
-target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml QuaZip::QuaZip) # Link QuaZip
+target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip) # Link QuaZip and WebEngine
 
 # --- Include Directories ---
 target_include_directories(MihonQT PRIVATE

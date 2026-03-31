@@ -8,13 +8,12 @@ SidebarWidget::SidebarWidget(QWidget *parent)
 
 void SidebarWidget::setupUi()
 {
-    m_layout = new QVBoxLayout(this);
-    m_layout->setContentsMargins(0, 10, 0, 10);
-    m_layout->setSpacing(5);
-    m_layout->setAlignment(Qt::AlignTop);
+    setFixedWidth(80); // Navigation rail exact width
 
-    // Style for the sidebar
-    // setStyleSheet("background-color: #2E3440;"); // Nord Darker
+    m_layout = new QVBoxLayout(this);
+    m_layout->setContentsMargins(0, 20, 0, 20);
+    m_layout->setSpacing(10); // Space between items
+    m_layout->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
 
     m_libraryBtn = createNavButton("Library", "library", 0);
     m_updatesBtn = createNavButton("Updates", "updates", 1);
@@ -26,42 +25,46 @@ void SidebarWidget::setupUi()
     m_layout->addWidget(m_historyBtn);
     m_layout->addWidget(m_browseBtn);
 
-    m_layout->addStretch(); // Push "Settings" to bottom
+    m_layout->addStretch();
 
-    m_settingsBtn = createNavButton("Settings", "settings", 4);
-    m_layout->addWidget(m_settingsBtn);
+    m_moreBtn = createNavButton("More", "more", 4);
+    m_layout->addWidget(m_moreBtn);
 }
 
-QPushButton* SidebarWidget::createNavButton(const QString &text, const QString &iconName, int index)
+QToolButton* SidebarWidget::createNavButton(const QString &text, const QString &iconName, int index)
 {
-    QPushButton *btn = new QPushButton(text, this);
+    QToolButton *btn = new QToolButton(this);
+    btn->setText(text);
+    btn->setIcon(QIcon(QString(":/icons/%1.svg").arg(iconName)));
+    btn->setIconSize(QSize(24, 24));
+    btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
     btn->setCheckable(true);
     btn->setAutoExclusive(true);
-    btn->setFixedHeight(50);
+    btn->setFixedSize(70, 60); // Size for the rail item
     btn->setCursor(Qt::PointingHandCursor);
 
-    // Placeholder stylesheet - can be moved to ThemeManager later
+    // Navigation Rail pill style
     btn->setStyleSheet(
-        "QPushButton { "
-        "   text-align: left; "
-        "   padding-left: 20px; "
+        "QToolButton { "
         "   border: none; "
-        "   color: #D8DEE9; "
-        "   font-size: 14px; "
+        "   color: #D8DEE9; " // Inactive text
+        "   font-size: 11px; "
+        "   font-weight: 500; "
+        "   border-radius: 16px; " // Pill shape for icon background
+        "   padding: 4px; "
         "}"
-        "QPushButton:checked { "
-        "   background-color: #4C566A; "
-        "   color: #ECEFF4; "
-        "   border-left: 4px solid #88C0D0; "
+        "QToolButton:checked { "
+        "   background-color: #88C0D0; " // Pill background (primary color)
+        "   color: #2E3440; "            // Active text color
         "}"
-        "QPushButton:hover { "
-        "   background-color: #434C5E; "
+        "QToolButton:hover { "
+        "   background-color: rgba(136, 192, 208, 0.15); "
         "}"
     );
 
     if (index == 0) btn->setChecked(true); // Default
 
-    connect(btn, &QPushButton::clicked, this, [this, index]() {
+    connect(btn, &QToolButton::clicked, this, [this, index]() {
         emit navigationRequested(index);
     });
 

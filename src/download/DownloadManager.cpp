@@ -202,6 +202,15 @@ void DownloadManager::downloadChapter(DownloadItem& item)
     // Copy each page
     int pageNum = 0;
     for (const QString& pageUrl : pageUrls) {
+        // Cancellation check
+        {
+            QMutexLocker locker(&m_mutex);
+            if (!m_activeDownloads.contains(item.chapterId)) {
+                qDebug() << "Download cancelled for chapter" << item.chapterId;
+                return;
+            }
+        }
+
         QString destFile = item.destinationPath + QString("/%1.jpg").arg(pageNum, 4, 10, QChar('0'));
 
         QImage image;

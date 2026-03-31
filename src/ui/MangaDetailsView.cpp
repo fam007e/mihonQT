@@ -13,6 +13,7 @@
 #include <QDialogButtonBox>
 #include <QFileInfo>
 #include "UiUtils.h"
+#include "WebViewDialog.h"
 
 MangaDetailsView::MangaDetailsView(QWidget *parent)
     : QWidget(parent)
@@ -34,6 +35,19 @@ void MangaDetailsView::setupUi()
     m_titleLabel->setStyleSheet("font-size: 18px; font-weight: bold; color: #ECEFF4; padding-left: 10px;");
     headerLayout->addWidget(m_titleLabel);
     headerLayout->addStretch();
+    
+    m_openWebViewButton = new QPushButton(this);
+    m_openWebViewButton->setIcon(QIcon(":/icons/public.svg"));
+    m_openWebViewButton->setToolTip("Open in WebView");
+    m_openWebViewButton->setFlat(true);
+    connect(m_openWebViewButton, &QPushButton::clicked, this, [this]() {
+        QString fullUrl = m_manga.url();
+        if (!fullUrl.isEmpty()) {
+            WebViewDialog dialog(fullUrl, this);
+            dialog.exec();
+        }
+    });
+    headerLayout->addWidget(m_openWebViewButton);
     mainLayout->addLayout(headerLayout);
 
     // Info area

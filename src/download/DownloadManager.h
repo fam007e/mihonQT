@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QQueue>
 #include <QMap>
-#include <QMutex>
+#include <QRecursiveMutex>
 #include <QThread>
 #include "../model/Manga.h"
 #include "../model/Chapter.h"
@@ -62,7 +62,7 @@ private:
     QMap<long, DownloadItem> m_activeDownloads;
     QString m_downloadPath;
     bool m_isProcessing = false;
-    mutable QMutex m_mutex;
+    mutable QRecursiveMutex m_mutex;
 };
 
 #endif // DOWNLOADMANAGER_H
