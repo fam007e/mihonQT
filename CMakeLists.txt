@@ -69,6 +69,12 @@ add_executable(MihonQT
 # --- Link Libraries ---
 target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip) # Link QuaZip and WebEngine
 
+# --- Deployment ---
+if(WIN32)
+    include(cmake/WinDeploy.cmake)
+    deploy_windows_dependencies(MihonQT USES_QT)
+endif()
+
 # --- Include Directories ---
 target_include_directories(MihonQT PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src

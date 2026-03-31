@@ -1,0 +1,69 @@
+name: Build MihonQT
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: ${{ matrix.os }} - Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    # --- Windows Setup (vcpkg) ---
+    - name: Windows - Setup vcpkg
+      if: matrix.os == 'windows-latest'
+      run: |
+        vcpkg integrate install
+
+    - name: Windows - Build with vcpkg
+      if: matrix.os == 'windows-latest'
+      run: |
+        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$RUNNER_WORKSPACE/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+        cmake --build build --config Release
+
+    # --- Ubuntu Setup ---
+    - name: Ubuntu - Install dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake qt6-base-dev qt6-webengine-dev libquazip1-qt6-dev
+
+    - name: Ubuntu - Build
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cmake -B build -S .
+        cmake --build build --config Release
+
+    # --- macOS Setup ---
+    - name: macOS - Install dependencies
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew update
+        brew install qt quazip
+
+    - name: macOS - Build
+      if: matrix.os == 'macos-latest'
+      run: |
+        cmake -B build -S . -DCMAKE_PREFIX_PATH=$(brew --prefix qt)
+        cmake --build build --config Release
+
+    # --- Artifacts ---
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: MihonQT-${{ matrix.os }}
+        path: |
+          build/MihonQT
+          build/Release/MihonQT.exe
+          build/MihonQT.app

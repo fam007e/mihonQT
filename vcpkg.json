@@ -1,0 +1,19 @@
+{
+  "name": "mihon-qt",
+  "version-string": "1.0.0-alpha",
+  "dependencies": [
+    "zlib",
+    "quazip",
+    {
+      "name": "qtbase",
+      "default-features": false,
+      "features": ["widgets", "concurrent", "network", "sql", "gui"]
+    },
+    "qtsvg",
+    "qt5compat",
+    "qtdeclarative",
+    "qtwebengine",
+    "qtwebchannel"
+  ],
+  "builtin-baseline": "47205630845bd49eaf16cdfb757cf9dfba144c52"
+}
