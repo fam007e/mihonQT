@@ -10,6 +10,8 @@ jobs:
   build:
     name: ${{ matrix.os }} - Build
     runs-on: ${{ matrix.os }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     strategy:
       fail-fast: false
       matrix:
@@ -29,7 +31,7 @@ jobs:
     - name: Windows - Build with vcpkg
       if: matrix.os == 'windows-latest'
       run: |
-        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$RUNNER_WORKSPACE/vcpkg/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
         cmake --build build --config Release
 
     # --- Ubuntu Setup ---
