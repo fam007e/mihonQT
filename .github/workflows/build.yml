@@ -55,7 +55,7 @@ jobs:
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
-        modules: 'qtwebengine qtwebchannel qt5compat qtsvg'
+        modules: 'qtwebengine qtwebchannel qt5compat'
         cache: true
 
     - name: Windows - Setup vcpkg
