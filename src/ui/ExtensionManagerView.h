@@ -22,6 +22,7 @@ protected:
 private slots:
     void onAddRepoClicked();
     void refreshAvailableExtensions();
+    void onCustomContextMenuRequested(const QPoint& pos);
 
 private:
     void setupUi();

@@ -121,6 +121,7 @@ private:
     // Security widgets
     QCheckBox *m_incognitoCheckBox;
     QCheckBox *m_secureScreenCheckBox;
+    QCheckBox *m_enforceHttpsCheckBox;
 
     // Advanced widgets
     QPushButton *m_clearDbButton;

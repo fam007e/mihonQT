@@ -1,5 +1,8 @@
 #include "PreferenceManager.h"
 
+const QString PreferenceManager::ENFORCE_HTTPS = "enforce_https";
+const QString PreferenceManager::TRUSTED_EXTENSIONS = "trusted_extensions";
+
 PreferenceManager& PreferenceManager::instance()
 {
     static PreferenceManager instance;

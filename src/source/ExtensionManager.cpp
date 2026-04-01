@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QSettings>
+#include "config/PreferenceManager.h"
 
 ExtensionManager& ExtensionManager::instance()
 {
@@ -113,6 +114,23 @@ bool ExtensionManager::isInstalled(const QString& pkgName, const QString& extens
         if (file.contains(pkgName)) return true;
     }
     return false;
+}
+
+bool ExtensionManager::isTrusted(const QString& pkgName) const
+{
+    QStringList trustedExts = PreferenceManager::instance().value(PreferenceManager::TRUSTED_EXTENSIONS).toStringList();
+    return trustedExts.contains(pkgName);
+}
+
+void ExtensionManager::setTrusted(const QString& pkgName, bool trusted)
+{
+    QStringList trustedExts = PreferenceManager::instance().value(PreferenceManager::TRUSTED_EXTENSIONS).toStringList();
+    if (trusted && !trustedExts.contains(pkgName)) {
+        trustedExts.append(pkgName);
+    } else if (!trusted && trustedExts.contains(pkgName)) {
+        trustedExts.removeAll(pkgName);
+    }
+    PreferenceManager::instance().setValue(PreferenceManager::TRUSTED_EXTENSIONS, trustedExts);
 }
 
 void ExtensionManager::installExtension(const RemoteExtension& ext, NetworkAccessManager* networkManager, const QString& extensionsDir)

@@ -41,6 +41,9 @@ public:
     void installExtension(const RemoteExtension& ext, NetworkAccessManager* networkManager, const QString& extensionsDir);
     bool isInstalled(const QString& pkgName, const QString& extensionsDir) const;
 
+    bool isTrusted(const QString& pkgName) const;
+    void setTrusted(const QString& pkgName, bool trusted);
+
 signals:
     void availableExtensionsChanged();
     void extensionInstalled(const QString& pkgName);

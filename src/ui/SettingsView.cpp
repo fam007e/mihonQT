@@ -94,6 +94,14 @@ void SettingsView::updatePreferences() {
     m_incognitoCheckBox->setChecked(incognito);
     m_incognitoCheckBox->blockSignals(false);
   }
+
+  // Sync HTTPS Enforcement
+  bool enforceHttps = PreferenceManager::instance().value(PreferenceManager::ENFORCE_HTTPS, false).toBool();
+  if (m_enforceHttpsCheckBox && m_enforceHttpsCheckBox->isChecked() != enforceHttps) {
+    m_enforceHttpsCheckBox->blockSignals(true);
+    m_enforceHttpsCheckBox->setChecked(enforceHttps);
+    m_enforceHttpsCheckBox->blockSignals(false);
+  }
 }
 
 void SettingsView::updateThemeColors() {
@@ -804,8 +812,18 @@ void SettingsView::createSecurityPage() {
     PreferenceManager::instance().setValue("security/secure_screen", checked);
   });
 
+  m_enforceHttpsCheckBox = new QCheckBox("Enforce HTTPS", this);
+  m_enforceHttpsCheckBox->setToolTip("Block all non-HTTPS requests from extensions.");
+  m_enforceHttpsCheckBox->setChecked(PreferenceManager::instance()
+                                         .value(PreferenceManager::ENFORCE_HTTPS, false)
+                                         .toBool());
+  connect(m_enforceHttpsCheckBox, &QCheckBox::toggled, [](bool checked) {
+    PreferenceManager::instance().setValue(PreferenceManager::ENFORCE_HTTPS, checked);
+  });
+
   securityLayout->addWidget(m_incognitoCheckBox);
   securityLayout->addWidget(m_secureScreenCheckBox);
+  securityLayout->addWidget(m_enforceHttpsCheckBox);
   layout->addWidget(securityGroup);
 
   m_contentStack->addWidget(page);

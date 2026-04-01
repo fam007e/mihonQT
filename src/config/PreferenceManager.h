@@ -13,6 +13,10 @@ public:
     void setValue(const QString& key, const QVariant& value);
     QVariant value(const QString& key, const QVariant& defaultValue = QVariant()) const;
 
+    // Security Settings
+    static const QString ENFORCE_HTTPS;
+    static const QString TRUSTED_EXTENSIONS;
+
 private:
     PreferenceManager();
     ~PreferenceManager();

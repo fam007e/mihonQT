@@ -3,10 +3,12 @@
 #include "model/Manga.h" // For Manga class
 #include "model/Chapter.h" // For Chapter class
 #include <QFile>
+#include <QFileInfo>
 #include <QTextStream>
 #include <QDebug>
 #include <QJSValueIterator>
 #include "HtmlParser.h"
+#include "ExtensionManager.h"
 
 
 // Helper class for console logging
@@ -42,13 +44,24 @@ JavascriptSource::JavascriptSource(const QString& scriptPath, QJSEngine* engine,
     QJSValue htmlWrapper = m_engine->newQObject(htmlParser);
     m_engine->globalObject().setProperty("Html", htmlWrapper);
 
-    // Expose console.log
+    // Expose the console.log
     ConsoleWrapper *consoleWrapper = new ConsoleWrapper(this);
     QJSValue consoleObj = m_engine->newQObject(consoleWrapper);
     m_engine->globalObject().setProperty("console", consoleObj);
 
-
     initScript();
+
+    // After script is initialized, we have the pkg name (from script object if available)
+    // and can set the network manager's trust status and base URL.
+    QString pkgName = m_scriptObject.property("pkg").toString();
+    if (pkgName.isEmpty()) {
+        // Fallback to filename if pkg is not defined in script
+        pkgName = QFileInfo(m_scriptPath).baseName();
+    }
+
+    bool isTrusted = ExtensionManager::instance().isTrusted(pkgName);
+    networkManager->setTrusted(isTrusted);
+    networkManager->setAllowedBaseUrl(this->baseUrl());
 
 }
 

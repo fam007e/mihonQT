@@ -3,6 +3,7 @@
 
 #include <QSqlDatabase>
 #include <QString>
+#include <memory>
 
 class MangaRepository;
 class ChapterRepository;
@@ -32,10 +33,10 @@ private:
 
     QSqlDatabase m_db;
 
-    MangaRepository* m_mangaRepo = nullptr;
-    ChapterRepository* m_chapterRepo = nullptr;
-    HistoryRepository* m_historyRepo = nullptr;
-    CategoryRepository* m_categoryRepo = nullptr;
+    std::unique_ptr<MangaRepository> m_mangaRepo;
+    std::unique_ptr<ChapterRepository> m_chapterRepo;
+    std::unique_ptr<HistoryRepository> m_historyRepo;
+    std::unique_ptr<CategoryRepository> m_categoryRepo;
 };
 
 #endif // DATABASEMANAGER_H

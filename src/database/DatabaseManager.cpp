@@ -10,6 +10,7 @@
 #include "ChapterRepository.h"
 #include "HistoryRepository.h"
 #include "CategoryRepository.h"
+#include <memory>
 
 DatabaseManager& DatabaseManager::instance()
 {
@@ -26,10 +27,6 @@ DatabaseManager::~DatabaseManager()
     if (m_db.isOpen()) {
         m_db.close();
     }
-    delete m_mangaRepo;
-    delete m_chapterRepo;
-    delete m_historyRepo;
-    delete m_categoryRepo;
 }
 
 bool DatabaseManager::openDatabase(const QString& path)
@@ -110,24 +107,24 @@ bool DatabaseManager::initializeDatabase()
 
 MangaRepository& DatabaseManager::mangaRepository()
 {
-    if (!m_mangaRepo) m_mangaRepo = new MangaRepository();
+    if (!m_mangaRepo) m_mangaRepo = std::make_unique<MangaRepository>();
     return *m_mangaRepo;
 }
 
 ChapterRepository& DatabaseManager::chapterRepository()
 {
-    if (!m_chapterRepo) m_chapterRepo = new ChapterRepository();
+    if (!m_chapterRepo) m_chapterRepo = std::make_unique<ChapterRepository>();
     return *m_chapterRepo;
 }
 
 HistoryRepository& DatabaseManager::historyRepository()
 {
-    if (!m_historyRepo) m_historyRepo = new HistoryRepository();
+    if (!m_historyRepo) m_historyRepo = std::make_unique<HistoryRepository>();
     return *m_historyRepo;
 }
 
 CategoryRepository& DatabaseManager::categoryRepository()
 {
-    if (!m_categoryRepo) m_categoryRepo = new CategoryRepository();
+    if (!m_categoryRepo) m_categoryRepo = std::make_unique<CategoryRepository>();
     return *m_categoryRepo;
 }

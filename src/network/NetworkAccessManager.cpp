@@ -5,6 +5,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray> // Needed for QJsonArray
+#include <QUrl>
+#include "config/PreferenceManager.h"
 #include <QVariant>
 #include <QJSValueIterator> 
 #include <QNetworkCookieJar>
@@ -20,6 +22,9 @@ NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent)
 
 QJSValue NetworkAccessManager::get(const QString& url)
 {
+    if (!isUrlAllowed(url)) {
+        return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
+    }
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
     QNetworkReply *reply = m_networkManager.get(request);
@@ -82,6 +87,9 @@ QJSValue NetworkAccessManager::get(const QString& url)
 
 QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
 {
+    if (!isUrlAllowed(url)) {
+        return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
+    }
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); // Example: assuming JSON post
     QNetworkReply *reply = m_networkManager.post(request, data);
@@ -147,4 +155,34 @@ void NetworkAccessManager::onReplyFinished(QNetworkReply* reply)
         qWarning() << "Asynchronous reply error (not caught by QJSValue methods):" << reply->errorString();
     }
     // reply->deleteLater(); // Handled by the QJSValue methods
+}
+
+void NetworkAccessManager::handleCloudflareIntercept(const QString& url)
+{
+    // Implementation for Cloudflare handling
+    qDebug() << "Cloudflare intercept for:" << url;
+}
+
+bool NetworkAccessManager::isUrlAllowed(const QString& urlString) const
+{
+    QUrl url(urlString);
+    
+    // Check HTTPS enforcement
+    bool enforceHttps = PreferenceManager::instance().value(PreferenceManager::ENFORCE_HTTPS, false).toBool();
+    if (enforceHttps && url.scheme().toLower() == "http") {
+        qWarning() << "Blocking insecure request due to HTTPS enforcement:" << urlString;
+        return false;
+    }
+
+    // Check base URL restriction for untrusted extensions
+    if (!m_isTrusted && !m_allowedBaseUrl.isEmpty()) {
+        QUrl baseUrl(m_allowedBaseUrl);
+        if (url.host().toLower() != baseUrl.host().toLower()) {
+            qWarning() << "Blocking cross-domain request from untrusted extension:" << urlString 
+                       << "(Allowed domain:" << baseUrl.host() << ")";
+            return false;
+        }
+    }
+
+    return true;
 }

@@ -12,6 +12,9 @@
 #include <QFile>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QMenu>
+#include <QAction>
+#include "../source/ExtensionManager.h"
 
 ExtensionManagerView::ExtensionManagerView(QWidget *parent)
     : QWidget(parent)
@@ -45,6 +48,8 @@ void ExtensionManagerView::setupUi()
     // Available list
     layout->addWidget(new QLabel("Available Extensions:", this));
     m_availableList = new QListWidget(this);
+    m_availableList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_availableList, &QListWidget::customContextMenuRequested, this, &ExtensionManagerView::onCustomContextMenuRequested);
     m_availableList->setStyleSheet(
         "QListWidget { background-color: #2E3440; border: none; border-radius: 4px; }"
         "QListWidget::item { padding: 10px; color: #ECEFF4; border-bottom: 1px solid #3B4252; }"
@@ -111,13 +116,37 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     // Most repos use: baseUrl/scripts/pkg.js
                     QString downloadUrl = repo.baseUrl + "/scripts/" + pkg + ".js";
 
-                    QListWidgetItem *item = new QListWidgetItem(name, m_availableList);
+                    bool isTrusted = ExtensionManager::instance().isTrusted(pkg);
+                    QString displayName = name + (isTrusted ? " [Trusted]" : "");
+                    
+                    QListWidgetItem *item = new QListWidgetItem(displayName, m_availableList);
                     item->setData(Qt::UserRole, pkg);
                     item->setData(Qt::UserRole + 1, downloadUrl);
+                    if (isTrusted) {
+                        item->setForeground(QColor("#A3BE8C")); // Greenish for trusted
+                    }
                 }
             }
             reply->deleteLater();
         });
+    }
+}
+
+void ExtensionManagerView::onCustomContextMenuRequested(const QPoint& pos)
+{
+    QListWidgetItem *item = m_availableList->itemAt(pos);
+    if (!item) return;
+
+    QString pkg = item->data(Qt::UserRole).toString();
+    bool isTrusted = ExtensionManager::instance().isTrusted(pkg);
+
+    QMenu menu(this);
+    QAction *trustAction = menu.addAction(isTrusted ? "Untrust Extension" : "Trust Extension");
+    
+    QAction *selectedAction = menu.exec(m_availableList->mapToGlobal(pos));
+    if (selectedAction == trustAction) {
+        ExtensionManager::instance().setTrusted(pkg, !isTrusted);
+        refreshAvailableExtensions(); // UI update
     }
 }
 
