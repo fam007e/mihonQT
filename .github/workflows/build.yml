@@ -55,8 +55,14 @@ jobs:
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
-        modules: 'qtwebengine qtwebchannel qt5compat'
+        modules: 'qtwebengine qtwebchannel qt5compat qtpositioning'
         cache: true
+
+    - name: Debug Qt modules (Windows)
+      if: matrix.os == 'windows-latest' && (success() || failure())
+      shell: pwsh
+      run: |
+        python -m aqt list-qt windows desktop --modules 6.7.2 win64_msvc2019_64
 
     - name: Windows - Setup vcpkg
       if: matrix.os == 'windows-latest'
