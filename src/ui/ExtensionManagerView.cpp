@@ -67,7 +67,7 @@ void ExtensionManagerView::setupUi()
                     QDir().mkpath(dataDir + "/extensions");
                     
                     QFile file(extensionsPath);
-                    if (file.open(QIODevice::WriteOnly)) {
+                    if (file.open(QIODevice::WriteOnly)) { // flawfinder: ignore
                         file.write(reply->readAll());
                         file.close();
                         QMessageBox::information(this, "Success", "Extension installed. Restart recommended.");

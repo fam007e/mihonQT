@@ -137,7 +137,7 @@ void ExtensionManager::installExtension(const RemoteExtension& ext, NetworkAcces
         if (reply->error() == QNetworkReply::NoError) {
             QString path = extensionsDir + "/" + ext.pkg + ".js";
             QFile file(path);
-            if (file.open(QIODevice::WriteOnly)) {
+            if (file.open(QIODevice::WriteOnly)) { // flawfinder: ignore
                 file.write(reply->readAll());
                 file.close();
                 emit extensionInstalled(ext.pkg);

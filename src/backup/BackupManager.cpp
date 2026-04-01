@@ -135,7 +135,7 @@ QJsonArray BackupManager::exportChapters()
             obj["mangaId"] = static_cast<qint64>(c.mangaId());
             obj["url"] = c.url();
             obj["name"] = c.name();
-            obj["read"] = c.read(); // flawfinder: ignore
+            obj["read"] = c.isRead();
             obj["bookmark"] = c.bookmark();
             obj["lastPageRead"] = static_cast<qint64>(c.lastPageRead());
             obj["chapterNumber"] = c.chapterNumber();

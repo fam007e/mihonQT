@@ -36,16 +36,43 @@ jobs:
       with:
         submodules: recursive
 
-    # --- Windows Setup (vcpkg) ---
+    # --- Windows Setup (Qt + vcpkg) ---
+    - name: Windows - Maximize Disk Space
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Get-PSDrive
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Android"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Android"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\hostedtoolcache\windows\CodeQL"
+        Get-PSDrive
+
+    - name: Windows - Install Qt
+      if: matrix.os == 'windows-latest'
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.7.2'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2019_64'
+        modules: 'qtwebengine qtwebchannel qtdeclarative qt5compat qtsvg'
+        cache: true
+
     - name: Windows - Setup vcpkg
       if: matrix.os == 'windows-latest'
       run: |
         vcpkg integrate install
 
-    - name: Windows - Build with vcpkg
+    - name: Windows - Build
       if: matrix.os == 'windows-latest'
+      shell: pwsh
+      env:
+        VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
       run: |
-        cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+        cmake -B build -S . `
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+          -DVCPKG_TARGET_TRIPLET=x64-windows `
+          -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
         cmake --build build --config Release
 
     # --- Ubuntu Setup ---

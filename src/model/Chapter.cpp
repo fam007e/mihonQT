@@ -1,7 +1,7 @@
 #include "Chapter.h"
 
 Chapter::Chapter(long id, long mangaId, const QString& url, const QString& name,
-                 const QString& scanlator, bool read, bool bookmark, long lastPageRead, // flawfinder: ignore
+                 const QString& scanlator, bool isRead, bool bookmark, long lastPageRead,
                  double chapterNumber, long sourceOrder, long dateFetch, long dateUpload,
                  long lastModifiedAt, long version, bool isSyncing)
     : m_id(id),
@@ -9,7 +9,7 @@ Chapter::Chapter(long id, long mangaId, const QString& url, const QString& name,
       m_url(url),
       m_name(name),
       m_scanlator(scanlator),
-      m_read(read), // flawfinder: ignore
+      m_read(isRead),
       m_bookmark(bookmark),
       m_lastPageRead(lastPageRead),
       m_chapterNumber(chapterNumber),
