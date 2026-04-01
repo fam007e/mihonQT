@@ -1,8 +1,7 @@
 <p align="center">
-  <img src="docs/logo.png" width="160" height="160" alt="MihonQT Logo">
+  <img src="docs/logo.png" width="250" height="250" alt="MihonQT Logo">
+  <h1 align="center">MihonQT</h1>
 </p>
-
-<h1 align="center">MihonQT</h1>
 <p align="center">
   <a href="https://github.com/fam007e/mihonQT/actions/workflows/build.yml">
     <img src="https://github.com/fam007e/mihonQT/actions/workflows/build.yml/badge.svg" alt="Build Status">
