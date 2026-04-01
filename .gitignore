@@ -8,6 +8,7 @@ Makefile
 MihonQT
 *_autogen/
 *.cmake
+!cmake/*.cmake
 CMakeScripts/
 Testing/
 **/build/
