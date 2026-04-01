@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" width="160" height="160" alt="MihonQT Logo">
+  <img src="logo.png" width="250" height="250" alt="MihonQT Logo">
 </p>
 
 # MihonQT Documentation
