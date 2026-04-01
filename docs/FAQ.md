@@ -14,7 +14,13 @@ MihonQT is built with Qt 6 and is designed to run on Linux, Windows, and macOS.
 Go to **More > Extensions**. You can add a repository URL (index.min.json) and browse available extensions to install them.
 
 ### Are extensions safe?
-Extensions are JavaScript files that run in a sandbox. However, they are given network and HTML parsing permissions. You should only install extensions from repositories you trust.
+Extensions in MihonQT run in a sandbox. To further protect users, we've implemented an **Extension Trust System**:
+- **Untrusted (Default):** Extensions are restricted to their source's domain and cannot perform cross-site requests.
+- **Trusted:** Users can explicitly "Trust" an extension in the Manager to remove these restrictions.
+- **Enforced HTTPS:** You can block all non-secure traffic from extensions in settings.
+
+### What is the user interface inspired by?
+MihonQT features a modern, Material 3-inspired design that closely matches the Tachiyomi/Mihon Android app experience, providing a familiar and premium feel for mobile users.
 
 ## Reading
 
@@ -22,9 +28,9 @@ Extensions are JavaScript files that run in a sandbox. However, they are given n
 Currently, MihonQT supports `.cbz` archives and local directories containing images (JPG, PNG, WebP).
 
 ### How do I navigate in the reader?
-- **Scroll:** Use your mouse wheel or touchpad.
-- **Back:** Right-click anywhere in the secondary views to return to the main dashboard.
-- **Keyboard:** (Coming soon) Arrow keys for page navigation.
+- **Scroll:** Vertically in Webtoon mode, or click/tap the sides in Paged mode.
+- **Back:** Right-click anywhere in secondary views, or use the **Back** (み) icon in the top-left sidebar.
+- **Keyboard:** Use **Left/Right Arrows** to flip pages, and **Up/Down Arrows** for vertical scrolling.
 
 ## Troubleshooting
 

@@ -1,16 +1,36 @@
+<p align="center">
+  <img src="docs/logo.png" width="160" height="160" alt="MihonQT Logo">
+</p>
+
 # MihonQT
 
-MihonQT is a cross-platform desktop manga reader built with C++ and Qt 6, inspired by the popular [Mihon](https://mihon.app/) (formerly Tachiyomi) Android application.
+<p align="center">
+  <a href="https://github.com/fam007e/mihonQT/actions/workflows/build.yml">
+    <img src="https://github.com/fam007e/mihonQT/actions/workflows/build.yml/badge.svg" alt="Build Status">
+  </a>
+  <a href="https://github.com/fam007e/mihonQT/actions/workflows/security.yml">
+    <img src="https://github.com/fam007e/mihonQT/actions/workflows/security.yml/badge.svg" alt="Security Scan">
+  </a>
+  <a href="https://github.com/fam007e/mihonQT/actions/workflows/release.yml">
+    <img src="https://github.com/fam007e/mihonQT/actions/workflows/release.yml/badge.svg" alt="Release Status">
+  </a>
+  <a href="https://github.com/fam007e/mihonQT/actions/workflows/static.yml">
+    <img src="https://github.com/fam007e/mihonQT/actions/workflows/static.yml/badge.svg" alt="Documentation Status">
+  </a>
+</p>
+
+MihonQT is a modern, extensible, and secure desktop manga reader built with C++ and Qt 6, inspired by the popular [Mihon](https://mihon.app/) (formerly Tachiyomi) Android application.
 
 ## ✨ Features
 
 - **📚 Library Management:** Organize your manga with categories and track your reading progress.
-- **🌐 Extension System:** Add third-party repositories to browse and install extensions for online sources.
+- **🌐 Extension System:** Add third-party repositories with a built-in **Extension Trust System** to sandbox online sources.
 - **🚀 Fast Reader:** Support for local directories and `.cbz` archives with smooth vertical (Webtoon) and paged reading modes.
 - **🕶️ Incognito Mode:** Pause history tracking and reading progress with a single toggle.
-- **📊 Statistics:** Get insights into your reading habits with a dedicated statistics dashboard.
+- **🎨 Material 3 Inspired UI:** A beautiful, responsive desktop interface consistent with Tachiyomi/Mihon Android.
 - **📥 Download Manager:** Queue chapters for offline reading with a robust, multi-threaded download manager.
-- **🎨 Dynamic Theming:** Beautiful, theme-aware UI with support for Nord, Catppuccin, Tokyo Night, and more.
+- **📊 Statistics:** Get insights into your reading habits with a dedicated statistics dashboard.
+- **🔒 Secure by Design:** Incorporating mitigations from the 2026 Security Audit for extension sandboxing and network security.
 
 ## 🚀 Getting Started
 
