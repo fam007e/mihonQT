@@ -49,13 +49,13 @@ jobs:
 
     - name: Windows - Install Qt
       if: matrix.os == 'windows-latest'
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: '6.7.2'
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
-        modules: 'qtwebengine qtwebchannel qtdeclarative qt5compat qtsvg'
+        modules: 'qtwebengine qtwebchannel qt5compat qtsvg'
         cache: true
 
     - name: Windows - Setup vcpkg
