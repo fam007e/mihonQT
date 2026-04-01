@@ -11,35 +11,113 @@ on:
 
 jobs:
   build_and_release:
-    name: Build and Release
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} - Build and Release
+    runs-on: ${{ matrix.os }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Install dependencies
+      # --- Windows Setup (Qt + vcpkg) ---
+      - name: Windows - Maximize Disk Space
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Get-PSDrive
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files\Android"
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\Program Files (x86)\Android"
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "C:\hostedtoolcache\windows\CodeQL"
+          Get-PSDrive
+
+      - name: Windows - Install Qt
+        if: matrix.os == 'windows-latest'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          modules: 'qtwebengine qtwebchannel qt5compat qtpositioning'
+          cache: true
+
+      - name: Windows - Setup vcpkg
+        if: matrix.os == 'windows-latest'
+        run: |
+          vcpkg integrate install
+
+      - name: Windows - Build
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+          cmake --build build --config Release
+
+      - name: Windows - Package
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/Release/* -DestinationPath MihonQT-windows-${{ github.ref_name }}.zip
+
+      # --- Ubuntu Setup ---
+      - name: Ubuntu - Install dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake qt6-base-dev
+          sudo apt-get install -y build-essential cmake qt6-base-dev qt6-webengine-dev libquazip1-qt6-dev
 
-      - name: Configure CMake
-        run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+      - name: Ubuntu - Build
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
 
-      - name: Build project
-        run: cmake --build build --config Release
-
-      - name: Prepare release artifact
+      - name: Ubuntu - Package
+        if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir release
           cp build/MihonQT release/
           tar -czvf MihonQT-linux-${{ github.ref_name }}.tar.gz -C release .
 
+      # --- macOS Setup ---
+      - name: macOS - Install dependencies
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install qt quazip
+
+      - name: macOS - Build
+        if: matrix.os == 'macos-latest'
+        run: |
+          cmake -B build -S . -DCMAKE_PREFIX_PATH=$(brew --prefix qt) -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+
+      - name: macOS - Package
+        if: matrix.os == 'macos-latest'
+        run: |
+          if [ -d "build/MihonQT.app" ]; then
+            zip -r MihonQT-macos-${{ github.ref_name }}.zip build/MihonQT.app
+          else
+            zip -j MihonQT-macos-${{ github.ref_name }}.zip build/MihonQT
+          fi
+
+      # --- Create/Update Release ---
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: MihonQT-linux-${{ github.ref_name }}.tar.gz
+          files: |
+            MihonQT-windows-${{ github.ref_name }}.zip
+            MihonQT-linux-${{ github.ref_name }}.tar.gz
+            MihonQT-macos-${{ github.ref_name }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
