@@ -11,6 +11,10 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 COMPONENTS Core Gui Widgets Sql Concurrent Quick Qml Core5Compat WebEngineWidgets WebEngineCore REQUIRED) # Add Core5Compat and WebEngine
 
+# --- Gumbo HTML5 Parser ---
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GUMBO REQUIRED gumbo)
+
 # --- QuaZip ---
 set(QUAZIP_QT_MAJOR_VERSION 6 CACHE STRING "Qt version to use (6 or 5)" FORCE)
 set(QUAZIP_ENABLE_QTEXTCODEC OFF CACHE BOOL "Enable use of QTextCodec" FORCE) # Disable QTextCodec
@@ -67,7 +71,7 @@ add_executable(MihonQT
 )
 
 # --- Link Libraries ---
-target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip) # Link QuaZip and WebEngine
+target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip ${GUMBO_LIBRARIES}) # Link QuaZip, WebEngine and Gumbo
 
 # --- Deployment ---
 if(WIN32)
@@ -77,6 +81,7 @@ endif()
 
 # --- Include Directories ---
 target_include_directories(MihonQT PRIVATE
+    ${GUMBO_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/database
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model

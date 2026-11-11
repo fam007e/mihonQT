@@ -1,275 +1,394 @@
 #include "HtmlParser.h"
-#include <QDebug>
 #include <QRegularExpression>
-#include <QStack>
+#include <QSet>
+#include <QDebug>
 
-HtmlElement::HtmlElement(const QString& tag, const QString& attrStr, const QString& inner, QObject *parent)
-    : QObject(parent), m_tagName(tag), m_attributes(attrStr), m_innerHtml(inner)
+struct AttributeFilter {
+    QString name;
+    QString op;
+    QString value;
+};
+
+struct CompoundSelector {
+    QString tag;
+    QString id;
+    QStringList classes;
+    QList<AttributeFilter> attributes;
+    QString containsText;
+    char combinator = ' '; // ' ' for descendant, '>' for child
+};
+
+static QString getNodeAttr(const GumboNode* node, const QString& attrName) {
+    if (!node || node->type != GUMBO_NODE_ELEMENT) return QString();
+    GumboAttribute* attr = gumbo_get_attribute(&node->v.element.attributes, attrName.toUtf8().constData());
+    if (attr) return QString::fromUtf8(attr->value);
+    return QString();
+}
+
+static bool hasNodeAttr(const GumboNode* node, const QString& attrName) {
+    if (!node || node->type != GUMBO_NODE_ELEMENT) return false;
+    GumboAttribute* attr = gumbo_get_attribute(&node->v.element.attributes, attrName.toUtf8().constData());
+    return attr != nullptr;
+}
+
+static QString getNodeTagName(const GumboNode* node) {
+    if (!node || node->type != GUMBO_NODE_ELEMENT) return QString();
+    if (node->v.element.tag == GUMBO_TAG_UNKNOWN) {
+        GumboStringPiece piece = node->v.element.original_tag;
+        gumbo_tag_from_original_text(&piece);
+        return QString::fromUtf8(piece.data, piece.length).toLower();
+    }
+    return QString::fromUtf8(gumbo_normalized_tagname(node->v.element.tag)).toLower();
+}
+
+static QString getNodeText(const GumboNode* node) {
+    if (!node) return QString();
+    if (node->type == GUMBO_NODE_TEXT || node->type == GUMBO_NODE_CDATA) {
+        return QString::fromUtf8(node->v.text.text);
+    }
+    if (node->type == GUMBO_NODE_ELEMENT) {
+        if (node->v.element.tag == GUMBO_TAG_SCRIPT || node->v.element.tag == GUMBO_TAG_STYLE) return QString();
+        QString result;
+        const GumboVector* children = &node->v.element.children;
+        for (unsigned int i = 0; i < children->length; ++i) {
+            result += getNodeText(static_cast<const GumboNode*>(children->data[i]));
+        }
+        return result;
+    }
+    return QString();
+}
+
+static QString serializeGumboNode(const GumboNode* node, bool innerOnly = false) {
+    if (!node) return QString();
+    if (node->type == GUMBO_NODE_TEXT || node->type == GUMBO_NODE_CDATA) {
+        return QString::fromUtf8(node->v.text.text);
+    }
+    if (node->type == GUMBO_NODE_ELEMENT) {
+        QString tag = getNodeTagName(node);
+        QString inner;
+        const GumboVector* children = &node->v.element.children;
+        for (unsigned int i = 0; i < children->length; ++i) {
+            inner += serializeGumboNode(static_cast<const GumboNode*>(children->data[i]), false);
+        }
+
+        if (innerOnly) return inner;
+
+        QString attrs;
+        const GumboVector* attrList = &node->v.element.attributes;
+        for (unsigned int i = 0; i < attrList->length; ++i) {
+            const GumboAttribute* attr = static_cast<const GumboAttribute*>(attrList->data[i]);
+            attrs += QString(" %1=\"%2\"").arg(QString::fromUtf8(attr->name), QString::fromUtf8(attr->value));
+        }
+
+        static const QSet<QString> voidTags = {
+            "area", "base", "br", "col", "embed", "hr", "img", "input",
+            "link", "meta", "param", "source", "track", "wbr"
+        };
+
+        if (voidTags.contains(tag) && inner.isEmpty()) {
+            return QString("<%1%2 />").arg(tag, attrs);
+        }
+        return QString("<%1%2>%3</%1>").arg(tag, attrs, inner);
+    }
+    return QString();
+}
+
+static bool matchesCompound(const GumboNode* node, const CompoundSelector& sel) {
+    if (!node || node->type != GUMBO_NODE_ELEMENT) return false;
+
+    // Check tag
+    if (!sel.tag.isEmpty() && sel.tag != "*") {
+        if (getNodeTagName(node) != sel.tag.toLower()) return false;
+    }
+
+    // Check ID
+    if (!sel.id.isEmpty()) {
+        if (getNodeAttr(node, "id") != sel.id) return false;
+    }
+
+    // Check classes
+    if (!sel.classes.isEmpty()) {
+        QString classAttr = getNodeAttr(node, "class");
+        QStringList nodeClasses = classAttr.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        for (const QString& cls : sel.classes) {
+            if (!nodeClasses.contains(cls)) return false;
+        }
+    }
+
+    // Check attributes
+    for (const AttributeFilter& af : sel.attributes) {
+        if (!hasNodeAttr(node, af.name)) return false;
+        if (!af.op.isEmpty()) {
+            QString actual = getNodeAttr(node, af.name);
+            if (af.op == "=" && actual != af.value) return false;
+            if (af.op == "*=" && !actual.contains(af.value)) return false;
+            if (af.op == "^=" && !actual.startsWith(af.value)) return false;
+            if (af.op == "$=" && !actual.endsWith(af.value)) return false;
+            if (af.op == "~=" && !actual.split(QRegularExpression("\\s+")).contains(af.value)) return false;
+        }
+    }
+
+    // Check containsText
+    if (!sel.containsText.isEmpty()) {
+        if (!getNodeText(node).contains(sel.containsText, Qt::CaseInsensitive)) return false;
+    }
+
+    return true;
+}
+
+static void collectDescendants(const GumboNode* node, const CompoundSelector& sel, QList<const GumboNode*>& results) {
+    if (!node || node->type != GUMBO_NODE_ELEMENT) return;
+
+    const GumboVector* children = &node->v.element.children;
+    for (unsigned int i = 0; i < children->length; ++i) {
+        const GumboNode* child = static_cast<const GumboNode*>(children->data[i]);
+        if (child->type == GUMBO_NODE_ELEMENT) {
+            if (matchesCompound(child, sel)) {
+                results.append(child);
+            }
+            collectDescendants(child, sel, results);
+        }
+    }
+}
+
+static void collectChildren(const GumboNode* node, const CompoundSelector& sel, QList<const GumboNode*>& results) {
+    if (!node || node->type != GUMBO_NODE_ELEMENT) return;
+
+    const GumboVector* children = &node->v.element.children;
+    for (unsigned int i = 0; i < children->length; ++i) {
+        const GumboNode* child = static_cast<const GumboNode*>(children->data[i]);
+        if (child->type == GUMBO_NODE_ELEMENT) {
+            if (matchesCompound(child, sel)) {
+                results.append(child);
+            }
+        }
+    }
+}
+
+static CompoundSelector parseCompoundToken(const QString& token, char combinator) {
+    CompoundSelector sel;
+    sel.combinator = combinator;
+
+    QString s = token.trimmed();
+
+    // Parse attributes: e.g. [attr*=val]
+    QRegularExpression attrRegex("\\[([a-zA-Z0-9_:-]+)(?:([*^$~]?=)(?:\"([^\"]*)\"|'([^']*)'|([^\\s\\]]+)))?\\]");
+    auto it = attrRegex.globalMatch(s);
+    while (it.hasNext()) {
+        auto match = it.next();
+        AttributeFilter af;
+        af.name = match.captured(1);
+        af.op = match.captured(2);
+        if (!match.captured(3).isEmpty()) af.value = match.captured(3);
+        else if (!match.captured(4).isEmpty()) af.value = match.captured(4);
+        else af.value = match.captured(5);
+        sel.attributes.append(af);
+    }
+    s.remove(attrRegex);
+
+    // Parse pseudo :contains(text)
+    QRegularExpression containsRegex(":contains\\((?:\"([^\"]*)\"|'([^']*)'|([^)]+))\\)");
+    auto cMatch = containsRegex.match(s);
+    if (cMatch.hasMatch()) {
+        sel.containsText = !cMatch.captured(1).isEmpty() ? cMatch.captured(1) : (!cMatch.captured(2).isEmpty() ? cMatch.captured(2) : cMatch.captured(3));
+        s.remove(containsRegex);
+    }
+
+    // Parse ID
+    QRegularExpression idRegex("#([a-zA-Z0-9_:-]+)");
+    auto idMatch = idRegex.match(s);
+    if (idMatch.hasMatch()) {
+        sel.id = idMatch.captured(1);
+        s.remove(idRegex);
+    }
+
+    // Parse classes
+    QRegularExpression classRegex("\\.([a-zA-Z0-9_:-]+)");
+    auto classIt = classRegex.globalMatch(s);
+    while (classIt.hasNext()) {
+        auto cm = classIt.next();
+        sel.classes.append(cm.captured(1));
+    }
+    s.remove(classRegex);
+
+    // Remaining must be tag name
+    s = s.trimmed();
+    if (!s.isEmpty()) {
+        sel.tag = s;
+    }
+
+    return sel;
+}
+
+static QList<CompoundSelector> parseSelectorChain(const QString& chainStr) {
+    QList<CompoundSelector> chain;
+    QString s = chainStr.trimmed();
+
+    // Tokenize preserving combinators ' > ' and ' '
+    s.replace(QRegularExpression("\\s*>\\s*"), " > ");
+    QStringList parts = s.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+
+    char currentCombinator = ' ';
+    for (int i = 0; i < parts.size(); ++i) {
+        if (parts[i] == ">") {
+            currentCombinator = '>';
+            continue;
+        }
+        chain.append(parseCompoundToken(parts[i], currentCombinator));
+        currentCombinator = ' ';
+    }
+    return chain;
+}
+
+static QList<const GumboNode*> evaluateChain(const GumboNode* root, const QList<CompoundSelector>& chain) {
+    if (chain.isEmpty() || !root) return {};
+
+    QList<const GumboNode*> current;
+    collectDescendants(root, chain[0], current);
+
+    for (int i = 1; i < chain.size(); ++i) {
+        const CompoundSelector& sel = chain[i];
+        QList<const GumboNode*> next;
+        for (const GumboNode* parent : current) {
+            if (sel.combinator == '>') {
+                collectChildren(parent, sel, next);
+            } else {
+                collectDescendants(parent, sel, next);
+            }
+        }
+        // Deduplicate
+        QList<const GumboNode*> dedup;
+        for (const GumboNode* n : next) {
+            if (!dedup.contains(n)) dedup.append(n);
+        }
+        current = dedup;
+    }
+    return current;
+}
+
+// HtmlElement implementation
+HtmlElement::HtmlElement(std::shared_ptr<GumboOutput> tree, const GumboNode* node, QObject *parent)
+    : QObject(parent), m_tree(tree), m_node(node)
 {
 }
 
 QString HtmlElement::text() const
 {
-    // Strip tags from innerHtml
-    QString copy = m_innerHtml;
-    // Remove <script>...</script> and <style>...</style> content first
-    copy.remove(QRegularExpression("<script[^>]*>.*?</script>", QRegularExpression::DotMatchesEverythingOption | QRegularExpression::CaseInsensitiveOption));
-    copy.remove(QRegularExpression("<style[^>]*>.*?</style>", QRegularExpression::DotMatchesEverythingOption | QRegularExpression::CaseInsensitiveOption));
+    return getNodeText(m_node).trimmed();
+}
 
-    // Remove tags
-    copy.remove(QRegularExpression("<[^>]*>"));
-
-    // Decode entities (basic ones)
-    copy.replace("&nbsp;", " ");
-    copy.replace("&amp;", "&");
-    copy.replace("&lt;", "<");
-    copy.replace("&gt;", ">");
-    copy.replace("&quot;", "\"");
-    copy.replace("&#39;", "'");
-
-    return copy.trimmed();
+QString HtmlElement::innerHtml() const
+{
+    return serializeGumboNode(m_node, true);
 }
 
 QString HtmlElement::outerHtml() const
 {
-    return QString("<%1%2>%3</%1>").arg(m_tagName, m_attributes.isEmpty() ? "" : " " + m_attributes, m_innerHtml);
+    return serializeGumboNode(m_node, false);
 }
 
-QString HtmlElement::attr(const QString& name)
+QString HtmlElement::tagName() const
 {
-    // Regex to find attribute value
-    // name="value" or name='value' or name=value
-    QRegularExpression regex(QString("%1\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]*))").arg(QRegularExpression::escape(name)), QRegularExpression::CaseInsensitiveOption);
-    QRegularExpressionMatch match = regex.match(m_attributes);
-    if (match.hasMatch()) {
-        if (!match.captured(1).isEmpty()) return match.captured(1);
-        if (!match.captured(2).isEmpty()) return match.captured(2);
-        return match.captured(3);
-    }
-    return QString();
+    return getNodeTagName(m_node);
+}
+
+QString HtmlElement::attr(const QString& name) const
+{
+    return getNodeAttr(m_node, name);
+}
+
+bool HtmlElement::hasAttr(const QString& name) const
+{
+    return hasNodeAttr(m_node, name);
 }
 
 QVariantList HtmlElement::select(const QString& selector)
 {
-    QList<HtmlElement*> list = HtmlParser::parse(m_innerHtml, selector);
-    QVariantList vList;
+    QList<HtmlElement*> list = HtmlParser::query(m_tree, m_node, selector);
+    QVariantList result;
+    result.reserve(list.size());
     for (HtmlElement* el : list) {
-        // Do not set parent. Let JS engine take ownership.
-        // el->setParent(this);
-        vList.append(QVariant::fromValue<QObject*>(el));
+        result.append(QVariant::fromValue<QObject*>(el));
     }
-    return vList;
+    return result;
 }
 
 QObject* HtmlElement::first(const QString& selector)
 {
-    QList<HtmlElement*> list = HtmlParser::parse(m_innerHtml, selector);
+    QList<HtmlElement*> list = HtmlParser::query(m_tree, m_node, selector);
     if (!list.isEmpty()) {
-        HtmlElement* el = list.first();
-        // Do not set parent
-        // el->setParent(this);
-        // Delete others
-        for (int i=1; i<list.size(); ++i) delete list[i];
-        return el;
+        return list.first();
     }
     return nullptr;
 }
 
-HtmlParser::HtmlParser(QObject *parent) : QObject(parent)
+// HtmlParser implementation
+HtmlParser::HtmlParser(QObject *parent)
+    : QObject(parent)
 {
+}
+
+QList<HtmlElement*> HtmlParser::query(std::shared_ptr<GumboOutput> tree, const GumboNode* root, const QString& selector)
+{
+    if (!tree || !root) return {};
+
+    QList<HtmlElement*> elements;
+    QList<const GumboNode*> matchedNodes;
+
+    QStringList subQueries = selector.split(",", Qt::SkipEmptyParts);
+    for (const QString& sub : subQueries) {
+        auto chain = parseSelectorChain(sub);
+        auto nodes = evaluateChain(root, chain);
+        for (const GumboNode* n : nodes) {
+            if (!matchedNodes.contains(n)) {
+                matchedNodes.append(n);
+            }
+        }
+    }
+
+    elements.reserve(matchedNodes.size());
+    for (const GumboNode* n : matchedNodes) {
+        elements.append(new HtmlElement(tree, n));
+    }
+    return elements;
 }
 
 QVariantList HtmlParser::select(const QString& html, const QString& selector)
 {
-    QList<HtmlElement*> list = parse(html, selector);
-    QVariantList vList;
+    QByteArray utf8 = html.toUtf8();
+    GumboOutput* raw = gumbo_parse(utf8.constData());
+    if (!raw) return QVariantList();
+
+    std::shared_ptr<GumboOutput> tree(raw, GumboOutputDeleter());
+    QList<HtmlElement*> list = query(tree, raw->root, selector);
+    QVariantList result;
+    result.reserve(list.size());
     for (HtmlElement* el : list) {
-        // el->setParent(this); // Manage memory - changed to let JS own it
-        vList.append(QVariant::fromValue<QObject*>(el));
+        result.append(QVariant::fromValue<QObject*>(el));
     }
-    return vList;
+    return result;
 }
 
 QObject* HtmlParser::first(const QString& html, const QString& selector)
 {
-    QList<HtmlElement*> list = parse(html, selector);
+    QByteArray utf8 = html.toUtf8();
+    GumboOutput* raw = gumbo_parse(utf8.constData());
+    if (!raw) return nullptr;
+
+    std::shared_ptr<GumboOutput> tree(raw, GumboOutputDeleter());
+    QList<HtmlElement*> list = query(tree, raw->root, selector);
     if (!list.isEmpty()) {
-        HtmlElement* el = list.first();
-        // Do not set parent
-        // el->setParent(this);
-        // Delete others
-        for (int i=1; i<list.size(); ++i) delete list[i];
-        return el;
+        return list.first();
     }
     return nullptr;
 }
 
 QObject* HtmlParser::parse(const QString& html)
 {
-    // Return a virtual root element containing the document
-    // We pass "root" as tag, and the full html as inner.
-    // This allows .select() to run on the full document.
-    return new HtmlElement("root", "", html);
-}
+    QByteArray utf8 = html.toUtf8();
+    GumboOutput* raw = gumbo_parse(utf8.constData());
+    if (!raw) return nullptr;
 
-// Logic to find elements matching a basic selector
-// Selector support: "tag", ".class", "tag.class", "a[href*='foo']"
-QList<HtmlElement*> HtmlParser::parse(const QString& html, const QString& selector)
-{
-    QList<HtmlElement*> results;
-
-    // 1. Parse selector
-    QString tag;
-    QString className;
-    QString attrName;
-    QString attrOp;
-    QString attrVal;
-
-    QString sel = selector;
-
-    // Check for attribute selector [attr*=val]
-    QRegularExpression attrRegex("\\[([a-zA-Z0-9_-]+)([*^$]?=)['\"]?([^'\"]*)['\"]?\\]");
-    QRegularExpressionMatch attrMatch = attrRegex.match(sel);
-    if (attrMatch.hasMatch()) {
-        attrName = attrMatch.captured(1);
-        attrOp = attrMatch.captured(2);
-        attrVal = attrMatch.captured(3);
-        sel.remove(attrMatch.capturedStart(), attrMatch.capturedLength());
-    }
-
-    // Check for class
-    int dotIdx = sel.indexOf('.');
-    if (dotIdx != -1) {
-        className = sel.mid(dotIdx + 1);
-        tag = sel.left(dotIdx);
-        if (tag.isEmpty()) tag = ""; // universal
-    } else {
-        tag = sel;
-    }
-
-    if (tag.isEmpty() && className.isEmpty() && attrName.isEmpty()) return results;
-
-    // 2. Scan HTML
-    // We iterate through the string seeking matches
-    // This is a naive scanner that handles nested same-tags.
-
-    int pos = 0;
-    // Regex for start tag of any kind: <([a-zA-Z0-9]+)([^>]*)>
-    QRegularExpression tagStartRegex("<([a-zA-Z0-9]+)([^>]*)>");
-
-    while (pos < html.length()) {
-        QRegularExpressionMatch match = tagStartRegex.match(html, pos);
-        if (!match.hasMatch()) break;
-
-        QString foundTag = match.captured(1);
-        QString foundAttrs = match.captured(2);
-        int startPos = match.capturedStart();
-        int endTagPos = match.capturedEnd();
-
-        bool isSelfClosing = foundAttrs.trimmed().endsWith("/");
-        bool isVoid = (foundTag.compare("img", Qt::CaseInsensitive) == 0 ||
-                       foundTag.compare("br", Qt::CaseInsensitive) == 0 ||
-                       foundTag.compare("hr", Qt::CaseInsensitive) == 0 ||
-                       foundTag.compare("input", Qt::CaseInsensitive) == 0 ||
-                       foundTag.compare("meta", Qt::CaseInsensitive) == 0);
-
-        // Check if this tag matches selector
-        bool matches = true;
-
-        // Tag check
-        if (!tag.isEmpty() && foundTag.compare(tag, Qt::CaseInsensitive) != 0) matches = false;
-
-        // Class check
-        if (matches && !className.isEmpty()) {
-            QRegularExpression classRegex(QString("class\\s*=\\s*[\"']?([^\"'>]*)[\"']?"), QRegularExpression::CaseInsensitiveOption);
-            QRegularExpressionMatch cm = classRegex.match(foundAttrs);
-            QString classes = cm.captured(1);
-            QStringList classList = classes.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-            if (!classList.contains(className)) matches = false;
-        }
-
-        // Attr check
-        if (matches && !attrName.isEmpty()) {
-             QRegularExpression aRegex(QString("%1\\s*=\\s*[\"']?([^\"'>]*)[\"']?").arg(QRegularExpression::escape(attrName)), QRegularExpression::CaseInsensitiveOption);
-             QRegularExpressionMatch am = aRegex.match(foundAttrs);
-             if (!am.hasMatch()) {
-                 matches = false;
-             } else {
-                 QString val = am.captured(1);
-                 if (attrOp == "=" && val != attrVal) matches = false;
-                 else if (attrOp == "*=" && !val.contains(attrVal)) matches = false;
-                 else if (attrOp == "^=" && !val.startsWith(attrVal)) matches = false;
-                 else if (attrOp == "$=" && !val.endsWith(attrVal)) matches = false;
-             }
-        }
-
-        // Extract Inner HTML
-        QString innerHtml;
-        int nextSearchPos = endTagPos;
-
-        if (isSelfClosing || isVoid) {
-            innerHtml = "";
-            nextSearchPos = endTagPos;
-        } else {
-            // Find closing tag, accounting for nesting
-            int depth = 1;
-            int current = endTagPos;
-
-            // Regex to find next start OR end tag of SAME type
-            // <foundTag ...> or </foundTag>
-            QRegularExpression tagSearch(QString("<(/?)%1\\b[^>]*>").arg(QRegularExpression::escape(foundTag)), QRegularExpression::CaseInsensitiveOption);
-
-            while (depth > 0) {
-                QRegularExpressionMatch m = tagSearch.match(html, current);
-                if (!m.hasMatch()) {
-                    // Malformed HTML, just take remaining? Or stop?
-                    // Let's assume unclosed = rest of string
-                    current = html.length();
-                    break;
-                }
-
-                if (m.captured(1) == "/") {
-                    depth--;
-                } else {
-                    // Check if self-closing
-                    if (!m.captured(0).endsWith("/>")) {
-                        depth++;
-                    }
-                }
-
-                if (depth == 0) {
-                    innerHtml = html.mid(endTagPos, m.capturedStart() - endTagPos);
-                    nextSearchPos = m.capturedEnd();
-                } else {
-                     current = m.capturedEnd();
-                }
-            }
-        }
-
-        if (matches) {
-            results.append(new HtmlElement(foundTag, foundAttrs, innerHtml));
-        }
-
-        if (matches && !selector.contains(" ")) {
-            // If simple selector, we found this block. We continue searching AFTER this block?
-            // Actually `select` searches *descendants* too if using a recursive parser.
-            // But here we are scanning linear.
-            // If we found a match, we can continue searching inside it?
-            // Our current logic scans linearly. If we found a match, we add it.
-            // We should ideally search INSIDE the matched element too if we want recursive find for generic selectors?
-            // But standard querySelectorAll usually returns elements in document order.
-
-            // If we continue at `nextSearchPos`, we skip nested matches inside the one we just found.
-            // e.g. div.foo > div.foo
-            // If we match outer, we skip inner.
-            // To find ALL, we should probably advance just by 1 char or past the start tag?
-            // Advancing past start tag allows matching nested items.
-            pos = endTagPos;
-        } else {
-            // No match, advance past start tag
-            pos = endTagPos;
-        }
-    }
-
-    return results;
+    std::shared_ptr<GumboOutput> tree(raw, GumboOutputDeleter());
+    return new HtmlElement(tree, raw->root);
 }
