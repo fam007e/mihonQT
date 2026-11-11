@@ -121,16 +121,35 @@ void ReaderSettingsOverlay::setupUi()
     layout->addWidget(brightnessLabel);
     layout->addWidget(m_brightnessSlider);
 
+    // Double Page Options
+    m_firstPageCoverCheck = new QCheckBox("First page is cover", this);
+    m_firstPageCoverCheck->setStyleSheet("QCheckBox { color: #ECEFF4; font-weight: normal; }");
+    connect(m_firstPageCoverCheck, &QCheckBox::toggled, this, &ReaderSettingsOverlay::firstPageCoverChanged);
+    layout->addWidget(m_firstPageCoverCheck);
+
+    m_autoWideDetectCheck = new QCheckBox("Don't pair wide pages", this);
+    m_autoWideDetectCheck->setStyleSheet("QCheckBox { color: #ECEFF4; font-weight: normal; }");
+    connect(m_autoWideDetectCheck, &QCheckBox::toggled, this, &ReaderSettingsOverlay::autoWideDetectChanged);
+    layout->addWidget(m_autoWideDetectCheck);
+
     layout->addStretch();
+}
+
+void ReaderSettingsOverlay::updateDoublePageControlsVisibility(int mode)
+{
+    bool isDoublePage = (mode == 3 || mode == 4);
+    if (m_firstPageCoverCheck) m_firstPageCoverCheck->setVisible(isDoublePage);
+    if (m_autoWideDetectCheck) m_autoWideDetectCheck->setVisible(isDoublePage);
 }
 
 void ReaderSettingsOverlay::setCurrentReadingMode(int mode)
 {
     // Map specific Double Page LTR (4) to generic Double Page (3) for UI display
-    if (mode == 4) mode = 3;
+    int displayMode = (mode == 4) ? 3 : mode;
 
-    int index = m_readingModeCombo->findData(mode);
+    int index = m_readingModeCombo->findData(displayMode);
     if (index >= 0) m_readingModeCombo->setCurrentIndex(index);
+    updateDoublePageControlsVisibility(mode);
 }
 
 void ReaderSettingsOverlay::setCurrentScaleType(int type)
@@ -142,4 +161,22 @@ void ReaderSettingsOverlay::setCurrentScaleType(int type)
 void ReaderSettingsOverlay::setCurrentBrightness(int brightness)
 {
     m_brightnessSlider->setValue(brightness);
+}
+
+void ReaderSettingsOverlay::setFirstPageCover(bool enabled)
+{
+    if (m_firstPageCoverCheck) {
+        m_firstPageCoverCheck->blockSignals(true);
+        m_firstPageCoverCheck->setChecked(enabled);
+        m_firstPageCoverCheck->blockSignals(false);
+    }
+}
+
+void ReaderSettingsOverlay::setAutoWideDetect(bool enabled)
+{
+    if (m_autoWideDetectCheck) {
+        m_autoWideDetectCheck->blockSignals(true);
+        m_autoWideDetectCheck->setChecked(enabled);
+        m_autoWideDetectCheck->blockSignals(false);
+    }
 }
