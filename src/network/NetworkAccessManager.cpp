@@ -2,6 +2,7 @@
 #include <QNetworkRequest>
 #include <QEventLoop> // For synchronous network requests (for QJSValue)
 #include <QDebug>
+#include <QThread>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray> // Needed for QJsonArray
@@ -25,9 +26,20 @@ QJSValue NetworkAccessManager::get(const QString& url)
     if (!isUrlAllowed(url)) {
         return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
     }
+
+    bool isWorkerThread = (QThread::currentThread() != this->thread());
+    QNetworkAccessManager localNet;
+    QNetworkAccessManager *net = &m_networkManager;
+    if (isWorkerThread) {
+        if (m_networkManager.cookieJar()) {
+            localNet.setCookieJar(m_networkManager.cookieJar());
+        }
+        net = &localNet;
+    }
+
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
-    QNetworkReply *reply = m_networkManager.get(request);
+    QNetworkReply *reply = net->get(request);
 
     QEventLoop loop;
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -69,6 +81,9 @@ QJSValue NetworkAccessManager::get(const QString& url)
                 }
             }, Qt::BlockingQueuedConnection);
 
+            if (isWorkerThread) {
+                localNet.setCookieJar(nullptr);
+            }
             if (success) {
                 reply->deleteLater();
                 return this->get(url); // Retry the request with the new cookies
@@ -81,6 +96,9 @@ QJSValue NetworkAccessManager::get(const QString& url)
         result = m_engine->toScriptValue(errorObject.toVariantMap()); // Convert QJsonObject error to QVariantMap
     }
 
+    if (isWorkerThread) {
+        localNet.setCookieJar(nullptr);
+    }
     reply->deleteLater();
     return result;
 }
@@ -90,9 +108,20 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
     if (!isUrlAllowed(url)) {
         return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
     }
+
+    bool isWorkerThread = (QThread::currentThread() != this->thread());
+    QNetworkAccessManager localNet;
+    QNetworkAccessManager *net = &m_networkManager;
+    if (isWorkerThread) {
+        if (m_networkManager.cookieJar()) {
+            localNet.setCookieJar(m_networkManager.cookieJar());
+        }
+        net = &localNet;
+    }
+
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); // Example: assuming JSON post
-    QNetworkReply *reply = m_networkManager.post(request, data);
+    QNetworkReply *reply = net->post(request, data);
 
     QEventLoop loop;
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -129,6 +158,9 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
                 }
             }, Qt::BlockingQueuedConnection);
 
+            if (isWorkerThread) {
+                localNet.setCookieJar(nullptr);
+            }
             if (success) {
                 reply->deleteLater();
                 return this->post(url, data); // Retry
@@ -141,6 +173,9 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
         result = m_engine->toScriptValue(errorObject.toVariantMap());
     }
 
+    if (isWorkerThread) {
+        localNet.setCookieJar(nullptr);
+    }
     reply->deleteLater();
     return result;
 }

@@ -33,12 +33,25 @@ static bool hasNodeAttr(const GumboNode* node, const QString& attrName) {
 
 static QString getNodeTagName(const GumboNode* node) {
     if (!node || node->type != GUMBO_NODE_ELEMENT) return QString();
-    if (node->v.element.tag == GUMBO_TAG_UNKNOWN) {
-        GumboStringPiece piece = node->v.element.original_tag;
-        gumbo_tag_from_original_text(&piece);
-        return QString::fromUtf8(piece.data, piece.length).toLower();
+    if (node->v.element.tag != GUMBO_TAG_UNKNOWN) {
+        const char* name = gumbo_normalized_tagname(node->v.element.tag);
+        if (name) return QString::fromUtf8(name).toLower();
     }
-    return QString::fromUtf8(gumbo_normalized_tagname(node->v.element.tag)).toLower();
+    GumboStringPiece piece = node->v.element.original_tag;
+    if (piece.data && piece.length > 0) {
+        int i = 0;
+        while (i < piece.length && (piece.data[i] == '<' || piece.data[i] == '/' || piece.data[i] == ' ' || piece.data[i] == '\t')) {
+            i++;
+        }
+        int start = i;
+        while (i < piece.length && piece.data[i] != '>' && piece.data[i] != '/' && piece.data[i] != ' ' && piece.data[i] != '\t' && piece.data[i] != '\n' && piece.data[i] != '\r') {
+            i++;
+        }
+        if (i > start) {
+            return QString::fromUtf8(piece.data + start, i - start).toLower();
+        }
+    }
+    return QString();
 }
 
 static QString getNodeText(const GumboNode* node) {
@@ -142,7 +155,7 @@ static void collectDescendants(const GumboNode* node, const CompoundSelector& se
     const GumboVector* children = &node->v.element.children;
     for (unsigned int i = 0; i < children->length; ++i) {
         const GumboNode* child = static_cast<const GumboNode*>(children->data[i]);
-        if (child->type == GUMBO_NODE_ELEMENT) {
+        if (child && child->type == GUMBO_NODE_ELEMENT) {
             if (matchesCompound(child, sel)) {
                 results.append(child);
             }
@@ -157,7 +170,7 @@ static void collectChildren(const GumboNode* node, const CompoundSelector& sel, 
     const GumboVector* children = &node->v.element.children;
     for (unsigned int i = 0; i < children->length; ++i) {
         const GumboNode* child = static_cast<const GumboNode*>(children->data[i]);
-        if (child->type == GUMBO_NODE_ELEMENT) {
+        if (child && child->type == GUMBO_NODE_ELEMENT) {
             if (matchesCompound(child, sel)) {
                 results.append(child);
             }
@@ -224,7 +237,6 @@ static QList<CompoundSelector> parseSelectorChain(const QString& chainStr) {
     QList<CompoundSelector> chain;
     QString s = chainStr.trimmed();
 
-    // Tokenize preserving combinators ' > ' and ' '
     s.replace(QRegularExpression("\\s*>\\s*"), " > ");
     QStringList parts = s.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
 
@@ -267,8 +279,8 @@ static QList<const GumboNode*> evaluateChain(const GumboNode* root, const QList<
 }
 
 // HtmlElement implementation
-HtmlElement::HtmlElement(std::shared_ptr<GumboOutput> tree, const GumboNode* node, QObject *parent)
-    : QObject(parent), m_tree(tree), m_node(node)
+HtmlElement::HtmlElement(std::shared_ptr<GumboDocumentState> doc, const GumboNode* node, QObject *parent)
+    : QObject(parent), m_doc(doc), m_node(node)
 {
 }
 
@@ -304,7 +316,7 @@ bool HtmlElement::hasAttr(const QString& name) const
 
 QVariantList HtmlElement::select(const QString& selector)
 {
-    QList<HtmlElement*> list = HtmlParser::query(m_tree, m_node, selector);
+    QList<HtmlElement*> list = HtmlParser::query(m_doc, m_node, selector);
     QVariantList result;
     result.reserve(list.size());
     for (HtmlElement* el : list) {
@@ -315,7 +327,7 @@ QVariantList HtmlElement::select(const QString& selector)
 
 QObject* HtmlElement::first(const QString& selector)
 {
-    QList<HtmlElement*> list = HtmlParser::query(m_tree, m_node, selector);
+    QList<HtmlElement*> list = HtmlParser::query(m_doc, m_node, selector);
     if (!list.isEmpty()) {
         return list.first();
     }
@@ -328,9 +340,9 @@ HtmlParser::HtmlParser(QObject *parent)
 {
 }
 
-QList<HtmlElement*> HtmlParser::query(std::shared_ptr<GumboOutput> tree, const GumboNode* root, const QString& selector)
+QList<HtmlElement*> HtmlParser::query(std::shared_ptr<GumboDocumentState> doc, const GumboNode* root, const QString& selector)
 {
-    if (!tree || !root) return {};
+    if (!doc || !root) return {};
 
     QList<HtmlElement*> elements;
     QList<const GumboNode*> matchedNodes;
@@ -348,19 +360,19 @@ QList<HtmlElement*> HtmlParser::query(std::shared_ptr<GumboOutput> tree, const G
 
     elements.reserve(matchedNodes.size());
     for (const GumboNode* n : matchedNodes) {
-        elements.append(new HtmlElement(tree, n));
+        elements.append(new HtmlElement(doc, n));
     }
     return elements;
 }
 
 QVariantList HtmlParser::select(const QString& html, const QString& selector)
 {
-    QByteArray utf8 = html.toUtf8();
-    GumboOutput* raw = gumbo_parse(utf8.constData());
-    if (!raw) return QVariantList();
+    auto doc = std::make_shared<GumboDocumentState>();
+    doc->buffer = html.toUtf8();
+    doc->output = gumbo_parse_with_options(&kGumboDefaultOptions, doc->buffer.constData(), doc->buffer.size());
+    if (!doc->output || !doc->output->root) return QVariantList();
 
-    std::shared_ptr<GumboOutput> tree(raw, GumboOutputDeleter());
-    QList<HtmlElement*> list = query(tree, raw->root, selector);
+    QList<HtmlElement*> list = query(doc, doc->output->root, selector);
     QVariantList result;
     result.reserve(list.size());
     for (HtmlElement* el : list) {
@@ -371,12 +383,12 @@ QVariantList HtmlParser::select(const QString& html, const QString& selector)
 
 QObject* HtmlParser::first(const QString& html, const QString& selector)
 {
-    QByteArray utf8 = html.toUtf8();
-    GumboOutput* raw = gumbo_parse(utf8.constData());
-    if (!raw) return nullptr;
+    auto doc = std::make_shared<GumboDocumentState>();
+    doc->buffer = html.toUtf8();
+    doc->output = gumbo_parse_with_options(&kGumboDefaultOptions, doc->buffer.constData(), doc->buffer.size());
+    if (!doc->output || !doc->output->root) return nullptr;
 
-    std::shared_ptr<GumboOutput> tree(raw, GumboOutputDeleter());
-    QList<HtmlElement*> list = query(tree, raw->root, selector);
+    QList<HtmlElement*> list = query(doc, doc->output->root, selector);
     if (!list.isEmpty()) {
         return list.first();
     }
@@ -385,10 +397,10 @@ QObject* HtmlParser::first(const QString& html, const QString& selector)
 
 QObject* HtmlParser::parse(const QString& html)
 {
-    QByteArray utf8 = html.toUtf8();
-    GumboOutput* raw = gumbo_parse(utf8.constData());
-    if (!raw) return nullptr;
+    auto doc = std::make_shared<GumboDocumentState>();
+    doc->buffer = html.toUtf8();
+    doc->output = gumbo_parse_with_options(&kGumboDefaultOptions, doc->buffer.constData(), doc->buffer.size());
+    if (!doc->output || !doc->output->root) return nullptr;
 
-    std::shared_ptr<GumboOutput> tree(raw, GumboOutputDeleter());
-    return new HtmlElement(tree, raw->root);
+    return new HtmlElement(doc, doc->output->root);
 }

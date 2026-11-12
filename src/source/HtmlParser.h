@@ -3,15 +3,19 @@
 
 #include <QObject>
 #include <QString>
+#include <QByteArray>
 #include <QList>
 #include <QVariant>
 #include <memory>
 #include <gumbo.h>
 
-struct GumboOutputDeleter {
-    void operator()(GumboOutput* p) const {
-        if (p) {
-            gumbo_destroy_output(&kGumboDefaultOptions, p);
+struct GumboDocumentState {
+    QByteArray buffer;
+    GumboOutput* output = nullptr;
+
+    ~GumboDocumentState() {
+        if (output) {
+            gumbo_destroy_output(&kGumboDefaultOptions, output);
         }
     }
 };
@@ -25,7 +29,7 @@ class HtmlElement : public QObject
     Q_PROPERTY(QString tagName READ tagName)
 
 public:
-    explicit HtmlElement(std::shared_ptr<GumboOutput> tree, const GumboNode* node, QObject *parent = nullptr);
+    explicit HtmlElement(std::shared_ptr<GumboDocumentState> doc, const GumboNode* node, QObject *parent = nullptr);
 
     Q_INVOKABLE QString text() const;
     Q_INVOKABLE QString innerHtml() const;
@@ -38,10 +42,10 @@ public:
     Q_INVOKABLE QObject* first(const QString& selector);
 
     const GumboNode* node() const { return m_node; }
-    std::shared_ptr<GumboOutput> tree() const { return m_tree; }
+    std::shared_ptr<GumboDocumentState> doc() const { return m_doc; }
 
 private:
-    std::shared_ptr<GumboOutput> m_tree;
+    std::shared_ptr<GumboDocumentState> m_doc;
     const GumboNode* m_node;
 
     friend class HtmlParser;
@@ -57,7 +61,7 @@ public:
     Q_INVOKABLE QObject* first(const QString& html, const QString& selector);
     Q_INVOKABLE QObject* parse(const QString& html);
 
-    static QList<HtmlElement*> query(std::shared_ptr<GumboOutput> tree, const GumboNode* root, const QString& selector);
+    static QList<HtmlElement*> query(std::shared_ptr<GumboDocumentState> doc, const GumboNode* root, const QString& selector);
 };
 
 #endif // HTMLPARSER_H
