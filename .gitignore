@@ -56,5 +56,6 @@ ui_*.h
 *.so
 
 # Dev artifacts
-extensions/
+extensions/*
+!extensions/*.js
 work/

@@ -50,9 +50,10 @@ void MangaListView::populateManga(const QList<Manga>& mangaList)
 
 void MangaListView::updateGridLayout()
 {
-    // Remove all from layout without deleting
-    for (int i = 0; i < m_gridLayout->count(); ++i) {
-        m_gridLayout->takeAt(i);
+    // Remove all layout items without deleting the actual card widgets
+    QLayoutItem *item;
+    while ((item = m_gridLayout->takeAt(0)) != nullptr) {
+        delete item;
     }
 
     int cardWidth = 145; // Card width + spacing estimate

@@ -360,7 +360,9 @@ QList<HtmlElement*> HtmlParser::query(std::shared_ptr<GumboDocumentState> doc, c
 
     elements.reserve(matchedNodes.size());
     for (const GumboNode* n : matchedNodes) {
-        elements.append(new HtmlElement(doc, n));
+        // Parent each element to the doc's first element so it survives GC
+        // but gets cleaned up when the HtmlParser or its parent engine destructs.
+        elements.append(new HtmlElement(doc, n, nullptr));
     }
     return elements;
 }

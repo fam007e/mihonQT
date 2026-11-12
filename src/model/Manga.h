@@ -26,6 +26,39 @@ enum UpdateStrategy {
 class Manga
 {
 public:
+    // Chapter sorting constants (matching Android Mihon)
+    static constexpr long CHAPTER_SORT_DESC = 0x00000000L;
+    static constexpr long CHAPTER_SORT_ASC = 0x00000001L;
+    static constexpr long CHAPTER_SORT_DIR_MASK = 0x00000001L;
+
+    static constexpr long CHAPTER_SHOW_UNREAD = 0x00000002L;
+    static constexpr long CHAPTER_SHOW_READ = 0x00000004L;
+    static constexpr long CHAPTER_UNREAD_MASK = 0x00000006L;
+
+    static constexpr long CHAPTER_SHOW_DOWNLOADED = 0x00000008L;
+    static constexpr long CHAPTER_SHOW_NOT_DOWNLOADED = 0x00000010L;
+    static constexpr long CHAPTER_DOWNLOADED_MASK = 0x00000018L;
+
+    static constexpr long CHAPTER_SHOW_BOOKMARKED = 0x00000020L;
+    static constexpr long CHAPTER_SHOW_NOT_BOOKMARKED = 0x00000040L;
+    static constexpr long CHAPTER_BOOKMARKED_MASK = 0x00000060L;
+
+    static constexpr long CHAPTER_SORTING_SOURCE = 0x00000000L;
+    static constexpr long CHAPTER_SORTING_NUMBER = 0x00000100L;
+    static constexpr long CHAPTER_SORTING_UPLOAD_DATE = 0x00000200L;
+    static constexpr long CHAPTER_SORTING_ALPHABET = 0x00000300L;
+    static constexpr long CHAPTER_SORTING_MASK = 0x00000300L;
+
+    static constexpr long CHAPTER_DISPLAY_NAME = 0x00000000L;
+    static constexpr long CHAPTER_DISPLAY_NUMBER = 0x00100000L;
+    static constexpr long CHAPTER_DISPLAY_MASK = 0x00100000L;
+
+    bool sortDescending() const {
+        return (m_chapterFlags & CHAPTER_SORT_DIR_MASK) == CHAPTER_SORT_DESC;
+    }
+    long sortingMode() const {
+        return m_chapterFlags & CHAPTER_SORTING_MASK;
+    }
     Manga(long id = -1,
           long source = -1,
           const QString& url = "",

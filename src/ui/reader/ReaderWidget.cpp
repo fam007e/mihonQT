@@ -2,6 +2,9 @@
 #include "ReaderSettingsOverlay.h"
 #include "../../model/Manga.h"
 #include "../../model/Chapter.h"
+#include "../../model/ChapterSort.h"
+#include "../../util/ImageUtil.h"
+#include "../../network/NetworkAccessManager.h"
 #include "../../source/LocalSource.h"
 #include "../../database/ChapterRepository.h"
 #include "../../database/MangaRepository.h"
@@ -38,7 +41,6 @@ ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
       m_pagedLabel(new QLabel(this)),
       m_currentPageIndex(0),
       m_readingMode(LeftToRight),
-      m_lastSinglePageMode(LeftToRight), // Initialize default preference
       m_localSource(new LocalSource()),
       m_sourceManager(sourceManager),
       m_chapterRepo(new ChapterRepository()),
@@ -49,8 +51,6 @@ ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
       m_firstPageCover(true),
       m_autoWideDetect(true)
 {
-    reloadSettings();
-    // ... (rest of constructor same) ...
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
@@ -83,10 +83,13 @@ ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
     m_viewStack->addWidget(m_pagedScrollArea); // Index 1: Paged
 
     setLayout(m_mainLayout);
+    m_viewStack->setCurrentIndex(m_readingMode == Webtoon ? 0 : 1);
 
     connect(this, &ReaderWidget::pageLoaded, this, &ReaderWidget::displayPage);
 
     setFocusPolicy(Qt::StrongFocus); // Enable focus for key events
+
+    reloadSettings();
 }
 
 ReaderWidget::~ReaderWidget()
@@ -110,9 +113,7 @@ void ReaderWidget::reloadSettings()
     m_autoWideDetect = PreferenceManager::instance().value("reader/double_page_auto_wide", true).toBool();
 
     int savedMode = PreferenceManager::instance().value("reader/default_mode", 1).toInt(); // Default to LeftToRight (1)
-    if (m_readingMode != static_cast<ReadingMode>(savedMode)) {
-        setReadingMode(static_cast<ReadingMode>(savedMode));
-    }
+    setReadingMode(static_cast<ReadingMode>(savedMode));
 
     // Apply Window States
     if (window()) {
@@ -139,10 +140,9 @@ void ReaderWidget::loadManga(const Manga& manga)
     m_currentManga = manga;
     m_localSource->setBaseDirectory(m_currentManga.url()); // Manga.url is the path for local source
     m_chapters = m_chapterRepo->getChaptersByMangaId(m_currentManga.id());
-    // Ensure chapters are sorted by Chapter Number (ASC) for logical reading order
-    std::sort(m_chapters.begin(), m_chapters.end(), [](const Chapter& a, const Chapter& b) {
-        return a.chapterNumber() < b.chapterNumber();
-    });
+    // Ensure chapters are sorted in ascending reading order (matching Android Mihon ReaderViewModel)
+    auto compInit = getChapterComparator(m_currentManga, /*sortDescending=*/false);
+    std::sort(m_chapters.begin(), m_chapters.end(), compInit);
 
     if (!m_chapters.isEmpty()) {
         loadAndDisplayPages(m_chapters.first()); // Load the first chapter for MVP
@@ -164,10 +164,9 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId, bool startAtEnd)
 
     m_localSource->setBaseDirectory(m_currentManga.url());
     m_chapters = m_chapterRepo->getChaptersByMangaId(mangaId);
-    // Ensure chapters are sorted by Chapter Number (ASC) for logical reading order
-    std::sort(m_chapters.begin(), m_chapters.end(), [](const Chapter& a, const Chapter& b) {
-        return a.chapterNumber() < b.chapterNumber();
-    });
+    // Ensure chapters are sorted in ascending reading order (matching Android Mihon ReaderViewModel)
+    auto comp = getChapterComparator(m_currentManga, /*sortDescending=*/false);
+    std::sort(m_chapters.begin(), m_chapters.end(), comp);
 
     Chapter chapterToLoad;
     if (chapterId == -1 && !m_chapters.isEmpty()) {
@@ -201,6 +200,7 @@ void ReaderWidget::clearChapterContent()
         }
         delete item;
     }
+    m_webtoonLabels.clear();
     // Clear Paged content
     m_loadedPages.clear();
     m_pagedLabel->clear();
@@ -215,7 +215,7 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter, bool startAtEnd)
 
     QString chapterUrl = chapter.url();
 
-    if (chapterUrl.startsWith("http://") || chapterUrl.startsWith("https://")) {
+    if (m_currentManga.source() != 0 || chapterUrl.startsWith("http://") || chapterUrl.startsWith("https://") || chapterUrl.startsWith("/")) {
         loadOnlineChapter(chapter, startAtEnd);
         return;
     }
@@ -316,8 +316,16 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter, bool startAtEnd)
         pageIndex++;
     }
 
-    // Resize loaded pages vector
+    // Resize loaded pages vector and setup webtoon placeholders
     m_loadedPages.resize(pageUrls.size());
+    for (int i = 0; i < pageUrls.size(); ++i) {
+        QLabel* label = new QLabel(m_contentWidget);
+        label->setAlignment(Qt::AlignCenter);
+        label->setStyleSheet("background-color: black;");
+        label->setScaledContents(false);
+        m_contentLayout->addWidget(label);
+        m_webtoonLabels.append(label);
+    }
 
     if (startAtEnd && !m_loadedPages.isEmpty()) {
         int target = m_loadedPages.size() - 1;
@@ -348,16 +356,7 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
     }
 
     // 2. Fetch Page List (Urls)
-    // This calls the JS getPageList implementation.
-    // Assuming getPageList returns a list of objects {index: 0, url: "..."} or just a list of page objects.
-    // We need to implement getPageList in SourceBase/JavascriptSource first if not present?
-    // User added getPageList to JS, so JavascriptSource needs to expose/call it.
-    // SourceBase needs virtual QList<Page> getPageList(const Chapter& chapter);
-    // Wait, SourceBase signature needs checking.
-
-    // Assuming SourceBase interface update (I will check SourceBase.h next).
-    // For now, let's assume getPageList returns just a list of URLs for simplicity or check existing code.
-    QList<QString> pageUrls = source->getPageList(chapter); // We need to ensure this method exists and works.
+    QList<QString> pageUrls = source->getPageList(chapter);
 
     if (pageUrls.isEmpty()) {
          qDebug() << "ReaderWidget: No pages found from source.";
@@ -366,7 +365,16 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
          return;
     }
 
+    qDebug() << "ReaderWidget: Loaded" << pageUrls.size() << "page URLs from source.";
     m_loadedPages.resize(pageUrls.size());
+    for (int i = 0; i < pageUrls.size(); ++i) {
+        QLabel* label = new QLabel(m_contentWidget);
+        label->setAlignment(Qt::AlignCenter);
+        label->setStyleSheet("background-color: black;");
+        label->setScaledContents(false);
+        m_contentLayout->addWidget(label);
+        m_webtoonLabels.append(label);
+    }
 
     if (startAtEnd && !m_loadedPages.isEmpty()) {
         int target = m_loadedPages.size() - 1;
@@ -386,47 +394,44 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
         updateView();
     }
 
-    // 3. Display Images (Download/Fetch)
-    // For online images, we should probably fetch them via NetworkAccessManager?
-    // Or just use QNetworkAccessManager in a thread/async?
-    // Ideally, we load them one by one or in parallel.
+    // Shared QNAM for reading with cookies and connection reuse
+    static QNetworkAccessManager* s_readerNam = nullptr;
+    if (!s_readerNam) {
+        s_readerNam = new QNetworkAccessManager(qApp);
+        s_readerNam->setCookieJar(NetworkAccessManager::sharedCookieJar());
+        NetworkAccessManager::sharedCookieJar()->setParent(qApp);
+    }
 
     int pageIndex = 0;
     for (const QString& url : pageUrls) {
-        // Simple async fetch using QNetworkAccessManager (via run_command? No, code here).
-        // Since we don't have easy access to NAM for async image fetching in this context without a proper async loader class...
-        // We can spawn a thread to download synchronous? Or use QNAM properly.
-        // Let's us QNetworkAccessManager from a new instance or passed one?
-        // Creating a new QNAM per request is okayish for small apps but better to reuse.
-        // MainWindow has one but ReaderWidget doesn't.
-
-        // MVP: Use QNetworkAccessManager in a simple way.
-        // Actually best to do this in main thread async.
-
-        QNetworkAccessManager* nam = new QNetworkAccessManager(this);
-        QNetworkRequest req(url);
-        req.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-
-        // Add Referer if available
+        QString fullPageUrl = url;
         QString baseUrl = source->baseUrl();
+        if (fullPageUrl.startsWith("/")) {
+            fullPageUrl = baseUrl + fullPageUrl;
+        }
+
+        QNetworkRequest req{QUrl(fullPageUrl)};
+        req.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+
         if (!baseUrl.isEmpty()) {
             req.setRawHeader("Referer", baseUrl.toUtf8());
         }
 
-        QNetworkReply* reply = nam->get(req);
-        connect(reply, &QNetworkReply::finished, this, [this, reply, pageIndex, nam]() {
+        QNetworkReply* reply = s_readerNam->get(req);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, pageIndex]() {
             if (reply->error() == QNetworkReply::NoError) {
                 QByteArray data = reply->readAll();
-                QImage img;
-                img.loadFromData(data);
+                QImage img = ImageUtil::loadFromData(data); // WebP support!
                 if (!img.isNull()) {
                      emit pageLoaded(img, pageIndex);
+                } else {
+                     qWarning() << "ReaderWidget: Failed to decode page" << pageIndex << "image data size:" << data.size();
                 }
             } else {
-                qWarning() << "Failed to load page" << pageIndex << reply->errorString();
+                qWarning() << "ReaderWidget: Failed to download page" << pageIndex << reply->errorString();
             }
             reply->deleteLater();
-            nam->deleteLater(); // Cleanup
         });
 
         pageIndex++;
@@ -440,64 +445,65 @@ void ReaderWidget::displayPage(const QImage& image, int pageIndex)
     }
 
     if (m_readingMode == Webtoon) {
-        QLabel* label = new QLabel(m_contentWidget);
-        QPixmap pixmap = QPixmap::fromImage(image);
+        if (pageIndex >= 0 && pageIndex < m_webtoonLabels.size() && m_webtoonLabels[pageIndex]) {
+            QPixmap pixmap = QPixmap::fromImage(image);
+            int targetWidth = m_scrollArea->viewport()->width();
+            if (targetWidth <= 0) targetWidth = this->width();
 
-        int targetWidth = m_scrollArea->viewport()->width();
-        if (targetWidth <= 0) targetWidth = this->width();
+            int paddingPx = targetWidth * m_webtoonPadding / 100;
+            targetWidth -= (paddingPx * 2);
 
-        // Adjust target width for padding
-        int paddingPx = targetWidth * m_webtoonPadding / 100;
-        targetWidth -= (paddingPx * 2);
+            if (targetWidth > 0 && pixmap.width() > targetWidth) {
+                pixmap = pixmap.scaledToWidth(targetWidth, Qt::SmoothTransformation);
+            }
 
-        if (targetWidth > 0 && pixmap.width() > targetWidth) {
-            pixmap = pixmap.scaledToWidth(targetWidth, Qt::SmoothTransformation);
+            m_webtoonLabels[pageIndex]->setPixmap(pixmap);
         }
-
-        label->setPixmap(pixmap);
-        label->setScaledContents(false);
-        label->setAlignment(Qt::AlignCenter);
-
-        // Insert in correct order (simple append for now, assuming sequential loading or re-sorting)
-        // For proper ordering with async loading, we should insert at specific index or sort layout
-        // For MVP, we just append. A better approach is to pre-create labels.
-        m_contentLayout->addWidget(label);
     } else {
-        // For Paged mode, update current view if this is the current page
-        if (pageIndex == m_currentPageIndex) {
+        // For Paged mode (LTR, RTL, Double Page Spread):
+        SpreadInfo info = getSpreadInfo(m_currentPageIndex);
+        if (pageIndex == m_currentPageIndex || (info.secondIndex != -1 && pageIndex == info.secondIndex)) {
             updateView();
+        }
+    }
+}
+
+void ReaderWidget::updateWebtoonView()
+{
+    int targetWidth = m_scrollArea->viewport()->width();
+    if (targetWidth <= 0) targetWidth = this->width();
+    int paddingPx = targetWidth * m_webtoonPadding / 100;
+    targetWidth -= (paddingPx * 2);
+
+    for (int i = 0; i < m_loadedPages.size(); ++i) {
+        if (i < m_webtoonLabels.size() && m_webtoonLabels[i]) {
+            const QImage& img = m_loadedPages[i];
+            if (!img.isNull()) {
+                QPixmap pixmap = QPixmap::fromImage(img);
+                if (targetWidth > 0 && pixmap.width() > targetWidth) {
+                    pixmap = pixmap.scaledToWidth(targetWidth, Qt::SmoothTransformation);
+                }
+                m_webtoonLabels[i]->setPixmap(pixmap);
+            }
         }
     }
 }
 
 void ReaderWidget::setReadingMode(ReadingMode mode)
 {
-    // Update Single Page Preference
-    if (mode == LeftToRight || mode == RightToLeft) {
-        m_lastSinglePageMode = mode;
-    }
-
-    // Smart Double Page Selection
-    if (mode == DoublePageSpread) {
-        if (m_lastSinglePageMode == LeftToRight) {
-            m_readingMode = DoublePageSpreadLeftToRight;
-        } else {
-            m_readingMode = DoublePageSpread; // Keeps it as RTL Spread (value 3)
-        }
-    } else {
-        m_readingMode = mode;
-    }
+    m_readingMode = mode;
 
     // Apply Mode
-    if (m_readingMode == Webtoon) {
-        m_viewStack->setCurrentIndex(0);
-    } else {
-        m_viewStack->setCurrentIndex(1);
-        updateView();
+    if (m_viewStack) {
+        if (m_readingMode == Webtoon) {
+            m_viewStack->setCurrentIndex(0);
+            updateWebtoonView();
+        } else {
+            m_viewStack->setCurrentIndex(1);
+            updateView();
+        }
     }
 
-    // Ensure Settings Overlay shows correct generic "Double Page"
-    // The overlay mapping (4 -> 3) is handled in ReaderSettingsOverlay::setCurrentReadingMode
     if (m_settingsOverlay) {
         m_settingsOverlay->setCurrentReadingMode(m_readingMode);
     }
@@ -825,10 +831,25 @@ void ReaderWidget::updateView()
         }
     }
 
-    if (pixmap.isNull()) return;
+    if (pixmap.isNull()) {
+        if (!m_loadedPages.isEmpty()) {
+            m_pagedLabel->setText(QString("Loading page %1 / %2...").arg(m_currentPageIndex + 1).arg(m_loadedPages.size()));
+            m_pagedLabel->setStyleSheet("color: #888888; font-size: 16px; background-color: black;");
+        }
+        return;
+    }
 
-    int w = this->width();
-    int h = this->height();
+    m_pagedLabel->setStyleSheet("background-color: black;");
+
+    int w = m_pagedScrollArea->viewport()->width();
+    int h = m_pagedScrollArea->viewport()->height();
+    if (w <= 0) w = this->width();
+    if (h <= 0) h = this->height();
+
+    if (w <= 50 || h <= 50) {
+        m_pagedLabel->setPixmap(pixmap);
+        return;
+    }
 
     Qt::AspectRatioMode aspectRatioMode = Qt::KeepAspectRatio;
     if (m_scaleType == Stretch) aspectRatioMode = Qt::IgnoreAspectRatio;
@@ -847,6 +868,16 @@ void ReaderWidget::updateView()
         }
     } else {
         m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
+    }
+}
+
+void ReaderWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    if (m_readingMode != Webtoon) {
+        updateView();
+    } else {
+        updateWebtoonView();
     }
 }
 

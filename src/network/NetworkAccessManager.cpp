@@ -1,45 +1,51 @@
 #include "NetworkAccessManager.h"
 #include <QNetworkRequest>
-#include <QEventLoop> // For synchronous network requests (for QJSValue)
+#include <QEventLoop>
 #include <QDebug>
 #include <QThread>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray> // Needed for QJsonArray
+#include <QJsonArray>
 #include <QUrl>
 #include "config/PreferenceManager.h"
 #include <QVariant>
-#include <QJSValueIterator> 
-#include <QNetworkCookieJar>
 #include <QApplication>
 #include "../ui/WebViewDialog.h"
+
+SharedCookieJar* NetworkAccessManager::sharedCookieJar()
+{
+    static SharedCookieJar* s_jar = new SharedCookieJar(qApp);
+    return s_jar;
+}
 
 NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) 
     : QObject(parent)
     , m_engine(engine) 
 {
-    m_networkManager.setCookieJar(new QNetworkCookieJar(this));
+    m_networkManager.setCookieJar(sharedCookieJar());
+    // Prevent QNAM from taking ownership of the shared jar.
+    // setCookieJar() reparents the jar to the QNAM, so when this QNAM
+    // destructs it would delete the shared singleton. Reset parent to qApp.
+    sharedCookieJar()->setParent(qApp);
+}
+
+NetworkAccessManager::~NetworkAccessManager()
+{
+    m_networkManager.setCookieJar(nullptr);
 }
 
 QJSValue NetworkAccessManager::get(const QString& url)
 {
     if (!isUrlAllowed(url)) {
-        return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
-    }
-
-    bool isWorkerThread = (QThread::currentThread() != this->thread());
-    QNetworkAccessManager localNet;
-    QNetworkAccessManager *net = &m_networkManager;
-    if (isWorkerThread) {
-        if (m_networkManager.cookieJar()) {
-            localNet.setCookieJar(m_networkManager.cookieJar());
+        if (m_engine) {
+            return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
         }
-        net = &localNet;
+        return QJSValue();
     }
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
-    QNetworkReply *reply = net->get(request);
+    QNetworkReply *reply = m_networkManager.get(request);
 
     QEventLoop loop;
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
@@ -53,15 +59,15 @@ QJSValue NetworkAccessManager::get(const QString& url)
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
         if (parseError.error == QJsonParseError::NoError) {
-            if (doc.isObject()) {
-                result = m_engine->toScriptValue(doc.object().toVariantMap()); // Convert QJsonObject to QVariantMap
-            } else if (doc.isArray()) {
-                result = m_engine->toScriptValue(doc.array().toVariantList()); // Convert QJsonArray to QVariantList
-            } else {
-                result = m_engine->toScriptValue(QString(data)); // Fallback to string if not JSON object/array
+            if (doc.isObject() && m_engine) {
+                result = m_engine->toScriptValue(doc.object().toVariantMap());
+            } else if (doc.isArray() && m_engine) {
+                result = m_engine->toScriptValue(doc.array().toVariantList());
+            } else if (m_engine) {
+                result = m_engine->toScriptValue(QString::fromUtf8(data));
             }
-        } else {
-            result = m_engine->toScriptValue(QString(data)); // If JSON parsing fails, return as plain string
+        } else if (m_engine) {
+            result = m_engine->toScriptValue(QString::fromUtf8(data));
         }
     } else {
         int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -69,21 +75,23 @@ QJSValue NetworkAccessManager::get(const QString& url)
             qWarning() << "Cloudflare GET challenge detected! Opening WebView Interceptor...";
             
             bool success = false;
-            // Ensure dialog runs on main thread
-            QMetaObject::invokeMethod(qApp, [this, url, &success]() {
+            auto showDialog = [url, &success]() {
                 WebViewDialog dialog(url);
                 dialog.exec();
                 
                 QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
                 if (!cookies.isEmpty()) {
-                    m_networkManager.cookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+                    sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
                     success = true;
                 }
-            }, Qt::BlockingQueuedConnection);
+            };
 
-            if (isWorkerThread) {
-                localNet.setCookieJar(nullptr);
+            if (QThread::currentThread() == qApp->thread()) {
+                showDialog();
+            } else {
+                QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
             }
+
             if (success) {
                 reply->deleteLater();
                 return this->get(url); // Retry the request with the new cookies
@@ -91,14 +99,13 @@ QJSValue NetworkAccessManager::get(const QString& url)
         }
 
         qWarning() << "Network GET request failed:" << reply->errorString();
-        QJsonObject errorObject;
-        errorObject["error"] = reply->errorString();
-        result = m_engine->toScriptValue(errorObject.toVariantMap()); // Convert QJsonObject error to QVariantMap
+        if (m_engine) {
+            QJsonObject errorObject;
+            errorObject["error"] = reply->errorString();
+            result = m_engine->toScriptValue(errorObject.toVariantMap());
+        }
     }
 
-    if (isWorkerThread) {
-        localNet.setCookieJar(nullptr);
-    }
     reply->deleteLater();
     return result;
 }
@@ -106,26 +113,20 @@ QJSValue NetworkAccessManager::get(const QString& url)
 QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
 {
     if (!isUrlAllowed(url)) {
-        return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
-    }
-
-    bool isWorkerThread = (QThread::currentThread() != this->thread());
-    QNetworkAccessManager localNet;
-    QNetworkAccessManager *net = &m_networkManager;
-    if (isWorkerThread) {
-        if (m_networkManager.cookieJar()) {
-            localNet.setCookieJar(m_networkManager.cookieJar());
+        if (m_engine) {
+            return m_engine->newErrorObject(QJSValue::GenericError, "Requested URL is not allowed: " + url);
         }
-        net = &localNet;
+        return QJSValue();
     }
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); // Example: assuming JSON post
-    QNetworkReply *reply = net->post(request, data);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    QNetworkReply *reply = m_networkManager.post(request, data);
 
     QEventLoop loop;
     connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec(); // Blocks until the reply finishes
+    loop.exec();
 
     QJSValue result;
     if (reply->error() == QNetworkReply::NoError) {
@@ -133,49 +134,51 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(responseData, &parseError);
         if (parseError.error == QJsonParseError::NoError) {
-            if (doc.isObject()) {
+            if (doc.isObject() && m_engine) {
                 result = m_engine->toScriptValue(doc.object().toVariantMap());
-            } else if (doc.isArray()) {
+            } else if (doc.isArray() && m_engine) {
                 result = m_engine->toScriptValue(doc.array().toVariantList());
-            } else {
-                result = m_engine->toScriptValue(QString(responseData));
+            } else if (m_engine) {
+                result = m_engine->toScriptValue(QString::fromUtf8(responseData));
             }
-        } else {
-            result = m_engine->toScriptValue(QString(responseData));
+        } else if (m_engine) {
+            result = m_engine->toScriptValue(QString::fromUtf8(responseData));
         }
     } else {
         int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
             qWarning() << "Cloudflare POST challenge detected! Opening WebView Interceptor...";
             bool success = false;
-            QMetaObject::invokeMethod(qApp, [this, url, &success]() {
+            auto showDialog = [url, &success]() {
                 WebViewDialog dialog(url);
                 dialog.exec();
                 QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
                 if (!cookies.isEmpty()) {
-                    m_networkManager.cookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+                    sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
                     success = true;
                 }
-            }, Qt::BlockingQueuedConnection);
+            };
 
-            if (isWorkerThread) {
-                localNet.setCookieJar(nullptr);
+            if (QThread::currentThread() == qApp->thread()) {
+                showDialog();
+            } else {
+                QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
             }
+
             if (success) {
                 reply->deleteLater();
-                return this->post(url, data); // Retry
+                return this->post(url, data);
             }
         }
 
         qWarning() << "Network POST request failed:" << reply->errorString();
-        QJsonObject errorObject;
-        errorObject["error"] = reply->errorString();
-        result = m_engine->toScriptValue(errorObject.toVariantMap());
+        if (m_engine) {
+            QJsonObject errorObject;
+            errorObject["error"] = reply->errorString();
+            result = m_engine->toScriptValue(errorObject.toVariantMap());
+        }
     }
 
-    if (isWorkerThread) {
-        localNet.setCookieJar(nullptr);
-    }
     reply->deleteLater();
     return result;
 }

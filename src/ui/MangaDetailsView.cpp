@@ -3,6 +3,7 @@
 #include "database/MangaRepository.h"
 #include "database/ChapterRepository.h"
 #include "database/CategoryRepository.h"
+#include "model/ChapterSort.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -120,6 +121,20 @@ void MangaDetailsView::setupUi()
     });
     actionsLayout->addWidget(m_editCategoriesButton);
 
+    m_sortButton = new QPushButton(this);
+    connect(m_sortButton, &QPushButton::clicked, this, [this]() {
+        // Toggle direction (matching Android Mihon tap behavior)
+        long flags = m_manga.chapterFlags();
+        long dir = flags & Manga::CHAPTER_SORT_DIR_MASK;
+        long newDir = (dir == Manga::CHAPTER_SORT_DESC) ? Manga::CHAPTER_SORT_ASC : Manga::CHAPTER_SORT_DESC;
+        flags = (flags & ~Manga::CHAPTER_SORT_DIR_MASK) | newDir;
+        m_manga.setChapterFlags(flags);
+        DatabaseManager::instance().mangaRepository().updateManga(m_manga);
+        updateSortButton();
+        refreshChapters();
+    });
+    actionsLayout->addWidget(m_sortButton);
+
     mainLayout->addLayout(actionsLayout);
 
     // Chapter List
@@ -140,6 +155,7 @@ void MangaDetailsView::setManga(const Manga& manga)
     m_authorLabel->setText("Author: " + m_manga.author());
     m_descriptionLabel->setText(m_manga.description());
     updateLibraryButton();
+    updateSortButton();
     refreshChapters();
 }
 
@@ -152,6 +168,16 @@ void MangaDetailsView::updateLibraryButton()
     }
 }
 
+void MangaDetailsView::updateSortButton()
+{
+    QString modeStr = "Source";
+    if (m_manga.sortingMode() == Manga::CHAPTER_SORTING_NUMBER) modeStr = "Number";
+    else if (m_manga.sortingMode() == Manga::CHAPTER_SORTING_UPLOAD_DATE) modeStr = "Date";
+    else if (m_manga.sortingMode() == Manga::CHAPTER_SORTING_ALPHABET) modeStr = "Name";
+    QString dirStr = m_manga.sortDescending() ? "↓" : "↑";
+    m_sortButton->setText(QString("Sort: %1 %2").arg(modeStr, dirStr));
+}
+
 void MangaDetailsView::refreshChapters()
 {
     m_chapterListWidget->clear();
@@ -159,6 +185,10 @@ void MangaDetailsView::refreshChapters()
 
     ChapterRepository& repo = DatabaseManager::instance().chapterRepository();
     m_chapters = repo.getChaptersByMangaId(m_manga.id());
+
+    // Sort chapters according to manga's chapterFlags (matching Android Mihon)
+    auto comparator = getChapterComparator(m_manga, m_manga.sortDescending());
+    std::sort(m_chapters.begin(), m_chapters.end(), comparator);
 
     for (const Chapter& chapter : m_chapters) {
         QListWidgetItem *item = new QListWidgetItem(m_chapterListWidget);

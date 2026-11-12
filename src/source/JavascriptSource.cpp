@@ -1,7 +1,7 @@
 #include "JavascriptSource.h"
-#include "network/NetworkAccessManager.h" // Include our NetworkAccessManager
-#include "model/Manga.h" // For Manga class
-#include "model/Chapter.h" // For Chapter class
+#include "network/NetworkAccessManager.h"
+#include "model/Manga.h"
+#include "model/Chapter.h"
 #include <QFile>
 #include <QFileInfo>
 #include <QTextStream>
@@ -9,7 +9,6 @@
 #include <QJSValueIterator>
 #include "HtmlParser.h"
 #include "ExtensionManager.h"
-
 
 // Helper class for console logging
 class ConsoleWrapper : public QObject
@@ -21,56 +20,127 @@ public:
     Q_INVOKABLE void log(const QString& msg) {
         qDebug() << "JS Console:" << msg;
     }
-    // Overload for multiple arguments if needed, or handle simpler
-    // Using QJSValue for flexible arguments
     Q_INVOKABLE void log(const QJSValue& val) {
-         qDebug() << "JS Console:" << val.toString();
+        qDebug() << "JS Console:" << val.toString();
     }
 };
 
-#include "JavascriptSource.moc" // Needed if we define QObject in cpp
+#include "JavascriptSource.moc"
 
-JavascriptSource::JavascriptSource(const QString& scriptPath, QJSEngine* engine, NetworkAccessManager* networkManager, QObject *parent)
+// ---- Helpers to extract all data from QJSValue while engine is alive ----
+
+static QString safeStr(const QJSValue& obj, const char* key) {
+    QJSValue v = obj.property(key);
+    return v.isUndefined() ? QString() : v.toString();
+}
+
+static long safeLong(const QJSValue& obj, const char* key) {
+    QJSValue v = obj.property(key);
+    return v.isUndefined() ? 0L : static_cast<long>(v.toNumber());
+}
+
+static int safeInt(const QJSValue& obj, const char* key) {
+    QJSValue v = obj.property(key);
+    return v.isUndefined() ? 0 : v.toInt();
+}
+
+static bool safeBool(const QJSValue& obj, const char* key) {
+    QJSValue v = obj.property(key);
+    return v.isUndefined() ? false : v.toBool();
+}
+
+static float safeFloat(const QJSValue& obj, const char* key) {
+    QJSValue v = obj.property(key);
+    return v.isUndefined() ? 0.0f : static_cast<float>(v.toNumber());
+}
+
+// Extract a manga list from a QJSValue array, fully copying all strings/numbers
+// out of the JS heap before the engine can be destroyed.
+static QList<Manga> extractMangaList(const QJSValue& jsResult, long sourceId)
+{
+    QList<Manga> mangaList;
+    if (!jsResult.isArray()) return mangaList;
+
+    int length = jsResult.property("length").toInt();
+    for (int i = 0; i < length; ++i) {
+        QJSValue jsManga = jsResult.property(i);
+        if (!jsManga.isObject()) continue;
+
+        Manga manga(
+            -1,
+            sourceId,
+            safeStr(jsManga, "url"),
+            safeStr(jsManga, "title"),
+            safeStr(jsManga, "artist"),
+            safeStr(jsManga, "author"),
+            safeStr(jsManga, "description"),
+            safeStr(jsManga, "genre"),
+            static_cast<MangaStatus>(safeInt(jsManga, "status")),
+            safeStr(jsManga, "thumbnail_url"),
+            safeBool(jsManga, "favorite"),
+            safeLong(jsManga, "lastUpdate"),
+            safeLong(jsManga, "nextUpdate"),
+            safeInt(jsManga, "fetchInterval"),
+            safeLong(jsManga, "dateAdded"),
+            safeInt(jsManga, "viewerFlags"),
+            safeInt(jsManga, "chapterFlags"),
+            safeLong(jsManga, "coverLastModified"),
+            static_cast<UpdateStrategy>(safeInt(jsManga, "updateStrategy")),
+            safeBool(jsManga, "initialized"),
+            safeLong(jsManga, "lastModifiedAt"),
+            safeLong(jsManga, "favoriteModifiedAt"),
+            safeInt(jsManga, "version"),
+            safeStr(jsManga, "notes")
+        );
+        mangaList.append(manga);
+    }
+    return mangaList;
+}
+
+static QList<SChapter> extractChapterList(const QJSValue& jsResult)
+{
+    QList<SChapter> chapterList;
+    if (!jsResult.isArray()) return chapterList;
+
+    int length = jsResult.property("length").toInt();
+    for (int i = 0; i < length; ++i) {
+        QJSValue jsChapter = jsResult.property(i);
+        if (!jsChapter.isObject()) continue;
+
+        SChapter chapter(
+            safeStr(jsChapter, "url"),
+            safeStr(jsChapter, "name"),
+            safeLong(jsChapter, "dateUpload"),
+            safeFloat(jsChapter, "chapterNumber"),
+            safeStr(jsChapter, "scanlator")
+        );
+        chapterList.append(chapter);
+    }
+    return chapterList;
+}
+
+static QList<QString> extractPageList(const QJSValue& jsResult)
+{
+    QList<QString> pageList;
+    if (!jsResult.isArray()) return pageList;
+
+    int length = jsResult.property("length").toInt();
+    for (int i = 0; i < length; ++i) {
+        QJSValue jsPage = jsResult.property(i);
+        if (jsPage.isObject()) {
+            pageList.append(safeStr(jsPage, "url"));
+        } else if (jsPage.isString()) {
+            pageList.append(jsPage.toString());
+        }
+    }
+    return pageList;
+}
+
+// ---- JavascriptSource implementation ----
+
+JavascriptSource::JavascriptSource(const QString& scriptPath, QJSEngine* /*engine*/, NetworkAccessManager* /*networkManager*/, QObject *parent)
     : SourceBase(parent)
     , m_scriptPath(scriptPath)
-    , m_engine(engine)
-{
-    // Expose the network manager to the JavaScript engine
-    QJSValue networkAccessManagerWrapper = m_engine->newQObject(networkManager);
-    m_engine->globalObject().setProperty("Network", networkAccessManagerWrapper);
-
-    // Expose the HtmlParser
-    HtmlParser *htmlParser = new HtmlParser(this);
-    QJSValue htmlWrapper = m_engine->newQObject(htmlParser);
-    m_engine->globalObject().setProperty("Html", htmlWrapper);
-
-    // Expose the console.log
-    ConsoleWrapper *consoleWrapper = new ConsoleWrapper(this);
-    QJSValue consoleObj = m_engine->newQObject(consoleWrapper);
-    m_engine->globalObject().setProperty("console", consoleObj);
-
-    initScript();
-
-    // After script is initialized, we have the pkg name (from script object if available)
-    // and can set the network manager's trust status and base URL.
-    QString pkgName = m_scriptObject.property("pkg").toString();
-    if (pkgName.isEmpty()) {
-        // Fallback to filename if pkg is not defined in script
-        pkgName = QFileInfo(m_scriptPath).baseName();
-    }
-
-    bool isTrusted = ExtensionManager::instance().isTrusted(pkgName);
-    networkManager->setTrusted(isTrusted);
-    networkManager->setAllowedBaseUrl(this->baseUrl());
-
-}
-
-JavascriptSource::~JavascriptSource()
-{
-    // QJSEngine and NetworkAccessManager are not owned by JavascriptSource
-}
-
-void JavascriptSource::initScript()
 {
     QFile scriptFile(m_scriptPath);
     if (!scriptFile.open(QIODevice::ReadOnly | QIODevice::Text)) { // flawfinder: ignore
@@ -79,49 +149,87 @@ void JavascriptSource::initScript()
     }
 
     QTextStream stream(&scriptFile);
-    QString scriptContents = stream.readAll();
+    m_scriptContent = stream.readAll();
     scriptFile.close();
 
-    QJSValue result = m_engine->evaluate(scriptContents, m_scriptPath);
+    // Use a temporary engine just to extract static metadata (name, id, etc.)
+    {
+        QJSEngine initEngine;
+        ConsoleWrapper consoleWrapper;
+        initEngine.globalObject().setProperty("console", initEngine.newQObject(&consoleWrapper));
 
-    if (result.isError()) {
-        qCritical() << "Uncaught exception at" << result.property("lineNumber").toInt()
-                    << ":" << result.toString();
-        return;
-    }
+        // Provide a stub Html and Network so the script doesn't error on missing globals
+        HtmlParser htmlParser;
+        initEngine.globalObject().setProperty("Html", initEngine.newQObject(&htmlParser));
 
-    // Assume the script defines a global object that represents the source
-    // e.g., 'var MySource = { name: "...", id: ..., getPopularManga: function() { ... } };'
-    // And that object is assigned to a global variable, or we simply use global functions.
-    // For now, let's assume global functions/properties for simplicity and then evolve.
-
-    QJSValue globalObject = m_engine->globalObject();
-    if (globalObject.hasProperty("source")) {
-        m_scriptObject = globalObject.property("source");
-        if (!m_scriptObject.isObject()) {
-            qWarning() << "JavaScript source script did not define a 'source' object properly.";
-            m_scriptObject = QJSValue(); // Invalidate script object
+        QJSValue result = initEngine.evaluate(m_scriptContent, m_scriptPath);
+        if (result.isError()) {
+            qCritical() << "Error evaluating script" << m_scriptPath << ":" << result.toString();
+            return;
         }
-    } else {
-        qWarning() << "JavaScript source script did not define a global 'source' object. Using global scope directly.";
-        m_scriptObject = globalObject; // Use global object directly if no 'source' object is found
+
+        QJSValue sourceObj = initEngine.globalObject().property("source");
+        if (!sourceObj.isObject()) {
+            sourceObj = initEngine.globalObject();
+        }
+
+        m_name = sourceObj.property("name").toString();
+        m_id = static_cast<long>(sourceObj.property("id").toNumber());
+        m_lang = sourceObj.property("lang").toString();
+        m_baseUrl = sourceObj.property("baseUrl").toString();
+        m_supportsLatest = sourceObj.property("supportsLatest").toBool();
+        m_pkgName = sourceObj.property("pkg").toString();
+        if (m_pkgName.isEmpty()) {
+            m_pkgName = QFileInfo(m_scriptPath).baseName();
+        }
+        // initEngine destructs here safely — no JS objects leaked
     }
 }
 
-QJSValue JavascriptSource::callJsFunction(const QString& functionName, const QJSValueList& args)
+JavascriptSource::~JavascriptSource()
 {
-    if (m_scriptObject.isUndefined() || m_scriptObject.isNull()) {
-        qCritical() << "JavaScript source object not initialized or invalid.";
-        return m_engine->newErrorObject(QJSValue::GenericError, "JavaScript source object not initialized or invalid.");
+}
+
+QString JavascriptSource::name() const { return m_name; }
+long JavascriptSource::id() const { return m_id; }
+QString JavascriptSource::lang() const { return m_lang; }
+QString JavascriptSource::baseUrl() const { return m_baseUrl; }
+bool JavascriptSource::supportsLatest() const { return m_supportsLatest; }
+
+QJSValue JavascriptSource::callJsMethod(QJSEngine& engine, const QString& functionName, const QJSValueList& args)
+{
+    // All helper objects are parented to the engine so they get destroyed with it
+    ConsoleWrapper *consoleWrapper = new ConsoleWrapper(&engine);
+    engine.globalObject().setProperty("console", engine.newQObject(consoleWrapper));
+
+    HtmlParser *htmlParser = new HtmlParser(&engine);
+    engine.globalObject().setProperty("Html", engine.newQObject(htmlParser));
+
+    NetworkAccessManager *netAccess = new NetworkAccessManager(&engine, &engine);
+    netAccess->setAllowedBaseUrl(m_baseUrl);
+    netAccess->setTrusted(ExtensionManager::instance().isTrusted(m_pkgName));
+    engine.globalObject().setProperty("Network", engine.newQObject(netAccess));
+
+    QJSValue evalResult = engine.evaluate(m_scriptContent, m_scriptPath);
+    if (evalResult.isError()) {
+        qCritical() << "Uncaught exception evaluating" << m_scriptPath << ":"
+                    << evalResult.toString() << "at line"
+                    << evalResult.property("lineNumber").toInt();
+        return QJSValue();
     }
 
-    QJSValue function = m_scriptObject.property(functionName);
+    QJSValue sourceObj = engine.globalObject().property("source");
+    if (!sourceObj.isObject()) {
+        sourceObj = engine.globalObject();
+    }
+
+    QJSValue function = sourceObj.property(functionName);
     if (!function.isCallable()) {
         qCritical() << "JavaScript function '" << functionName << "' not found or not callable in script.";
-        return m_engine->newErrorObject(QJSValue::GenericError, "JavaScript function not found or not callable.");
+        return QJSValue();
     }
 
-    QJSValue result = function.callWithInstance(m_scriptObject, args);
+    QJSValue result = function.callWithInstance(sourceObj, args);
     if (result.isError()) {
         qCritical() << "JavaScript function '" << functionName << "' failed:" << result.toString()
                     << "at line" << result.property("lineNumber").toInt();
@@ -129,223 +237,86 @@ QJSValue JavascriptSource::callJsFunction(const QString& functionName, const QJS
     return result;
 }
 
-QString JavascriptSource::name() const
-{
-    QJSValue value = m_scriptObject.property("name");
-    return value.toString();
-}
-
-long JavascriptSource::id() const
-{
-    QJSValue value = m_scriptObject.property("id");
-    return static_cast<long>(value.toNumber());
-}
-
-QString JavascriptSource::lang() const
-{
-    QJSValue value = m_scriptObject.property("lang");
-    return value.toString();
-}
-
-
-
-QString JavascriptSource::baseUrl() const
-{
-    QJSValue value = m_scriptObject.property("baseUrl");
-    return value.toString();
-}
-
-bool JavascriptSource::supportsLatest() const
-{
-    QJSValue value = m_scriptObject.property("supportsLatest");
-    return value.toBool();
-}
-
 QList<Manga> JavascriptSource::getPopularManga()
 {
-    QList<Manga> mangaList;
-    QJSValue jsResult = callJsFunction("getPopularManga");
-    if (jsResult.isArray()) {
-        QJSValueIterator it(jsResult);
-        while (it.hasNext()) {
-            it.next();
-            QJSValue jsManga = it.value();
-            if (jsManga.isObject()) {
-                // Convert JS object to C++ Manga object
-                // This is a simplified conversion, actual conversion might be more complex
-                Manga manga(
-                    -1, // ID, will be assigned by DB
-                    this->id(), // source ID
-                    jsManga.property("url").toString(),
-                    jsManga.property("title").toString(),
-                    jsManga.property("artist").toString(),
-                    jsManga.property("author").toString(),
-                    jsManga.property("description").toString(),
-                    jsManga.property("genre").toString(),
-                    static_cast<MangaStatus>(jsManga.property("status").toInt()),
-                    jsManga.property("thumbnail_url").toString(),
-                    jsManga.property("favorite").toBool(),
-                    static_cast<long>(jsManga.property("lastUpdate").toNumber()),
-                    static_cast<long>(jsManga.property("nextUpdate").toNumber()),
-                    jsManga.property("fetchInterval").toInt(),
-                    static_cast<long>(jsManga.property("dateAdded").toNumber()),
-                    jsManga.property("viewerFlags").toInt(),
-                    jsManga.property("chapterFlags").toInt(),
-                    static_cast<long>(jsManga.property("coverLastModified").toNumber()),
-                    static_cast<UpdateStrategy>(jsManga.property("updateStrategy").toInt()),
-                    jsManga.property("initialized").toBool(),
-                    static_cast<long>(jsManga.property("lastModifiedAt").toNumber()),
-                    static_cast<long>(jsManga.property("favoriteModifiedAt").toNumber()),
-                    jsManga.property("version").toInt(),
-                    jsManga.property("notes").toString()
-                );
-                mangaList.append(manga);
-            }
-        }
-    }
-    return mangaList;
+    QJSEngine engine;
+    QJSValue jsResult = callJsMethod(engine, "getPopularManga");
+    // Extract ALL data from JS values before engine destructs
+    QList<Manga> list = extractMangaList(jsResult, this->id());
+    // Clear JS references before engine teardown
+    jsResult = QJSValue();
+    engine.collectGarbage();
+    return list;
 }
 
 QList<Manga> JavascriptSource::getLatestUpdates()
 {
-    // Similar conversion logic as getPopularManga
-    QList<Manga> mangaList;
-    QJSValue jsResult = callJsFunction("getLatestUpdates");
-    if (jsResult.isArray()) {
-        QJSValueIterator it(jsResult);
-        while (it.hasNext()) {
-            it.next();
-            QJSValue jsManga = it.value();
-            if (jsManga.isObject()) {
-                Manga manga(
-                    -1, this->id(),
-                    jsManga.property("url").toString(), jsManga.property("title").toString(),
-                    jsManga.property("artist").toString(), jsManga.property("author").toString(),
-                    jsManga.property("description").toString(), jsManga.property("genre").toString(),
-                    static_cast<MangaStatus>(jsManga.property("status").toInt()),
-                    jsManga.property("thumbnail_url").toString(), jsManga.property("favorite").toBool(),
-                    static_cast<long>(jsManga.property("lastUpdate").toNumber()), static_cast<long>(jsManga.property("nextUpdate").toNumber()),
-                    jsManga.property("fetchInterval").toInt(), static_cast<long>(jsManga.property("dateAdded").toNumber()),
-                    jsManga.property("viewerFlags").toInt(), jsManga.property("chapterFlags").toInt(),
-                    static_cast<long>(jsManga.property("coverLastModified").toNumber()),
-                    static_cast<UpdateStrategy>(jsManga.property("updateStrategy").toInt()),
-                    jsManga.property("initialized").toBool(),
-                    static_cast<long>(jsManga.property("lastModifiedAt").toNumber()), static_cast<long>(jsManga.property("favoriteModifiedAt").toNumber()),
-                    jsManga.property("version").toInt(), jsManga.property("notes").toString()
-                );
-                mangaList.append(manga);
-            }
-        }
-    }
-    return mangaList;
+    QJSEngine engine;
+    QJSValue jsResult = callJsMethod(engine, "getLatestUpdates");
+    QList<Manga> list = extractMangaList(jsResult, this->id());
+    jsResult = QJSValue();
+    engine.collectGarbage();
+    return list;
 }
 
 QList<Manga> JavascriptSource::getSearchManga(const QString& query)
 {
-    QList<Manga> mangaList;
-    QJSValue jsResult = callJsFunction("getSearchManga", QJSValueList() << query);
-    if (jsResult.isArray()) {
-        QJSValueIterator it(jsResult);
-        while (it.hasNext()) {
-            it.next();
-            QJSValue jsManga = it.value();
-            if (jsManga.isObject()) {
-                Manga manga(
-                    -1, this->id(),
-                    jsManga.property("url").toString(), jsManga.property("title").toString(),
-                    jsManga.property("artist").toString(), jsManga.property("author").toString(),
-                    jsManga.property("description").toString(), jsManga.property("genre").toString(),
-                    static_cast<MangaStatus>(jsManga.property("status").toInt()),
-                    jsManga.property("thumbnail_url").toString(), jsManga.property("favorite").toBool(),
-                    static_cast<long>(jsManga.property("lastUpdate").toNumber()), static_cast<long>(jsManga.property("nextUpdate").toNumber()),
-                    jsManga.property("fetchInterval").toInt(), static_cast<long>(jsManga.property("dateAdded").toNumber()),
-                    jsManga.property("viewerFlags").toInt(), jsManga.property("chapterFlags").toInt(),
-                    static_cast<long>(jsManga.property("coverLastModified").toNumber()),
-                    static_cast<UpdateStrategy>(jsManga.property("updateStrategy").toInt()),
-                    jsManga.property("initialized").toBool(),
-                    static_cast<long>(jsManga.property("lastModifiedAt").toNumber()), static_cast<long>(jsManga.property("favoriteModifiedAt").toNumber()),
-                    jsManga.property("version").toInt(), jsManga.property("notes").toString()
-                );
-                mangaList.append(manga);
-            }
-        }
-    }
-    return mangaList;
+    QJSEngine engine;
+    QJSValueList args;
+    args << QJSValue(query);
+    QJSValue jsResult = callJsMethod(engine, "getSearchManga", args);
+    QList<Manga> list = extractMangaList(jsResult, this->id());
+    jsResult = QJSValue();
+    engine.collectGarbage();
+    return list;
 }
 
 Manga JavascriptSource::getMangaDetails(const Manga& manga)
 {
-    // Need to pass Manga object to JS. QJSValue can wrap QObjects, but Manga is not a QObject.
-    // Will need a custom conversion or pass relevant properties. For simplicity, passing ID and URL.
+    QJSEngine engine;
     QJSValueList args;
     args << QJSValue(static_cast<double>(manga.id())) << QJSValue(manga.url());
 
-    QJSValue jsResult = callJsFunction("getMangaDetails", args);
-    if (jsResult.isObject()) {
-        // Create a new Manga object with updated details from JS
-        Manga updatedManga(manga); // Start with existing manga details
-        updatedManga.setArtist(jsResult.property("artist").toString());
-        updatedManga.setAuthor(jsResult.property("author").toString());
-        updatedManga.setDescription(jsResult.property("description").toString());
-        updatedManga.setGenre(jsResult.property("genre").toString());
-        updatedManga.setStatus(static_cast<MangaStatus>(jsResult.property("status").toInt()));
-        updatedManga.setThumbnailUrl(jsResult.property("thumbnail_url").toString());
-        updatedManga.setInitialized(jsResult.property("initialized").toBool());
-        // ... update other properties as needed
-        return updatedManga;
-    }
-    return manga; // Return original manga if JS call fails
+    QJSValue jsResult = callJsMethod(engine, "getMangaDetails", args);
+    if (!jsResult.isObject()) return manga;
+
+    // Extract all values out of JS heap immediately
+    Manga updatedManga(manga);
+    if (jsResult.hasProperty("artist")) updatedManga.setArtist(safeStr(jsResult, "artist"));
+    if (jsResult.hasProperty("author")) updatedManga.setAuthor(safeStr(jsResult, "author"));
+    if (jsResult.hasProperty("description")) updatedManga.setDescription(safeStr(jsResult, "description"));
+    if (jsResult.hasProperty("genre")) updatedManga.setGenre(safeStr(jsResult, "genre"));
+    if (jsResult.hasProperty("status")) updatedManga.setStatus(static_cast<MangaStatus>(safeInt(jsResult, "status")));
+    if (jsResult.hasProperty("thumbnail_url")) updatedManga.setThumbnailUrl(safeStr(jsResult, "thumbnail_url"));
+    if (jsResult.hasProperty("initialized")) updatedManga.setInitialized(safeBool(jsResult, "initialized"));
+
+    jsResult = QJSValue();
+    engine.collectGarbage();
+    return updatedManga;
 }
 
 QList<SChapter> JavascriptSource::getChapterList(const Manga& manga)
 {
-    QList<SChapter> chapterList;
-    // Need to pass Manga object to JS. For simplicity, passing ID and URL.
+    QJSEngine engine;
     QJSValueList args;
     args << QJSValue(static_cast<double>(manga.id())) << QJSValue(manga.url());
 
-    QJSValue jsResult = callJsFunction("getChapterList", args);
-    if (jsResult.isArray()) {
-        QJSValueIterator it(jsResult);
-        while (it.hasNext()) {
-            it.next();
-            QJSValue jsChapter = it.value();
-            if (jsChapter.isObject()) {
-                SChapter chapter(
-                    jsChapter.property("url").toString(),
-                    jsChapter.property("name").toString(),
-                    static_cast<long>(jsChapter.property("dateUpload").toNumber()),
-                    static_cast<float>(jsChapter.property("chapterNumber").toNumber()),
-                    jsChapter.property("scanlator").toString()
-                );
-                chapterList.append(chapter);
-            }
-        }
-    }
-    return chapterList;
+    QJSValue jsResult = callJsMethod(engine, "getChapterList", args);
+    QList<SChapter> list = extractChapterList(jsResult);
+    jsResult = QJSValue();
+    engine.collectGarbage();
+    return list;
 }
 
 QList<QString> JavascriptSource::getPageList(const Chapter& chapter)
 {
-    QList<QString> pageList;
-    // Pass chapter details to JS
+    QJSEngine engine;
     QJSValueList args;
     args << QJSValue(static_cast<double>(chapter.id())) << QJSValue(chapter.url());
 
-    QJSValue jsResult = callJsFunction("getPageList", args);
-    if (jsResult.isArray()) {
-        QJSValueIterator it(jsResult);
-        while (it.hasNext()) {
-            it.next();
-            QJSValue jsPage = it.value();
-            if (jsPage.isObject()) {
-                // Expecting { index: 0, url: "..." }
-                // We just need the URL for now
-                pageList.append(jsPage.property("url").toString());
-            } else if (jsPage.isString()) {
-                pageList.append(jsPage.toString());
-            }
-        }
-    }
-    return pageList;
+    QJSValue jsResult = callJsMethod(engine, "getPageList", args);
+    QList<QString> list = extractPageList(jsResult);
+    jsResult = QJSValue();
+    engine.collectGarbage();
+    return list;
 }

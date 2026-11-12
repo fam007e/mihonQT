@@ -174,5 +174,7 @@ void SourceBrowseView::onMangaFetchFinished()
     m_mangaListView->show();
     m_popularBtn->setEnabled(true);
     m_latestBtn->setEnabled(m_source ? m_source->supportsLatest() : true);
-    m_mangaListView->populateManga(m_watcher.result());
+    QList<Manga> list = m_watcher.result();
+    qDebug() << "SourceBrowseView: Successfully loaded and populated" << list.size() << "manga items into grid view.";
+    m_mangaListView->populateManga(list);
 }
