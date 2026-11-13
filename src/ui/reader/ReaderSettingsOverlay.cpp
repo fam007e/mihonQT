@@ -1,57 +1,19 @@
 #include "ReaderSettingsOverlay.h"
+#include "../ThemeManager.h"
 #include <QGraphicsDropShadowEffect>
 
 ReaderSettingsOverlay::ReaderSettingsOverlay(QWidget *parent)
     : QFrame(parent)
 {
     setupUi();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
+        restyle();
+    });
 }
 
 void ReaderSettingsOverlay::setupUi()
 {
-    setFixedWidth(300);
-    setMinimumHeight(200);
-    setStyleSheet(
-        "ReaderSettingsOverlay {"
-        "   background-color: #2E3440;"
-        "   border-radius: 12px;"
-        "   border: 1px solid #4C566A;"
-        "}"
-        "QLabel { color: #ECEFF4; font-weight: bold; }"
-        "QComboBox {"
-        "   background-color: #3B4252;"
-        "   color: #ECEFF4;"
-        "   border: 1px solid #4C566A;"
-        "   border-radius: 6px;"
-        "   padding: 8px;"
-        "   min-width: 150px;"
-        "}"
-        "QComboBox QAbstractItemView {"
-        "   background-color: #3B4252;"
-        "   color: #ECEFF4;"
-        "   selection-background-color: #88C0D0;"
-        "   border: 1px solid #4C566A;"
-        "}"
-        "QComboBox::drop-down { border: none; }"
-        "QSlider::groove:horizontal {"
-        "   background: #4C566A;"
-        "   height: 8px;"
-        "   border-radius: 4px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        "   background: #88C0D0;"
-        "   width: 18px;"
-        "   margin: -5px 0;"
-        "   border-radius: 9px;"
-        "}"
-    );
-
-    // Shadow effect
-    QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(20);
-    shadow->setOffset(0, 5);
-    shadow->setColor(QColor(0, 0, 0, 100));
-    setGraphicsEffect(shadow);
+    // (No graphics effect: it breaks QWidget::render and offscreen painting)
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(16, 16, 16, 16);
@@ -60,21 +22,14 @@ void ReaderSettingsOverlay::setupUi()
     // Title
     QHBoxLayout *titleLayout = new QHBoxLayout();
     QLabel *titleLabel = new QLabel("Reader Settings", this);
-    titleLabel->setStyleSheet("font-size: 16px;");
+    titleLabel->setObjectName("overlayTitle");
 
     QPushButton *backBtn = new QPushButton("← Back to Library", this);
-    backBtn->setStyleSheet(
-        "QPushButton { background: #4C566A; color: #ECEFF4; padding: 6px 12px; border-radius: 4px; border: none; font-weight: bold; }"
-        "QPushButton:hover { background: #5E81AC; }"
-    );
+    backBtn->setObjectName("overlayBackBtn");
     connect(backBtn, &QPushButton::clicked, this, &ReaderSettingsOverlay::backToLibraryRequested);
 
     QPushButton *closeBtn = new QPushButton("✕", this);
-    closeBtn->setFixedSize(24, 24);
-    closeBtn->setStyleSheet(
-        "QPushButton { background: transparent; color: #ECEFF4; font-size: 16px; border: none; }"
-        "QPushButton:hover { color: #BF616A; }"
-    );
+    closeBtn->setObjectName("overlayCloseBtn");
     connect(closeBtn, &QPushButton::clicked, this, &ReaderSettingsOverlay::closeRequested);
 
     titleLayout->addWidget(titleLabel);
@@ -113,7 +68,7 @@ void ReaderSettingsOverlay::setupUi()
     layout->addWidget(scaleLabel);
     layout->addWidget(m_scaleTypeCombo);
 
-    // Brightness
+    // Brightness (applied to the page canvas, like Mihon's custom brightness)
     QLabel *brightnessLabel = new QLabel("Brightness", this);
     m_brightnessSlider = new QSlider(Qt::Horizontal, this);
     m_brightnessSlider->setRange(10, 100);
@@ -124,16 +79,41 @@ void ReaderSettingsOverlay::setupUi()
 
     // Double Page Options
     m_firstPageCoverCheck = new QCheckBox("First page is cover", this);
-    m_firstPageCoverCheck->setStyleSheet("QCheckBox { color: #ECEFF4; font-weight: normal; }");
     connect(m_firstPageCoverCheck, &QCheckBox::toggled, this, &ReaderSettingsOverlay::firstPageCoverChanged);
     layout->addWidget(m_firstPageCoverCheck);
 
     m_autoWideDetectCheck = new QCheckBox("Don't pair wide pages", this);
-    m_autoWideDetectCheck->setStyleSheet("QCheckBox { color: #ECEFF4; font-weight: normal; }");
     connect(m_autoWideDetectCheck, &QCheckBox::toggled, this, &ReaderSettingsOverlay::autoWideDetectChanged);
     layout->addWidget(m_autoWideDetectCheck);
 
     layout->addStretch();
+
+    restyle();
+}
+
+void ReaderSettingsOverlay::restyle()
+{
+    const M3Colors& c = ThemeManager::instance().colors();
+    setStyleSheet(
+        QStringLiteral(
+        "ReaderSettingsOverlay {"
+        "   background-color: %1;"
+        "   border-radius: 16px;"
+        "}"
+        "QLabel { color: %2; font-weight: bold; background: transparent; }"
+        "QCheckBox { color: %2; font-weight: normal; background: transparent; }"
+        "#overlayTitle { font-size: 16px; }"
+        "#overlayBackBtn { background-color: %3; color: %4; padding: 8px 14px;"
+        "  border-radius: 20px; border: none; font-weight: 600; }"
+        "#overlayBackBtn:hover { background-color: %5; }"
+        "#overlayCloseBtn { background: transparent; border: none; font-size: 16px; color: %2; }"
+        "#overlayCloseBtn:hover { color: %6; }")
+        .arg(c.surfaceContainerHigh.name(),
+             c.onSurface.name(),
+             c.secondaryContainer.name(),
+             c.onSecondaryContainer.name(),
+             ThemeManager::rgba(c.onSurface, 0.12f),
+             c.error.name()));
 }
 
 void ReaderSettingsOverlay::updateDoublePageControlsVisibility(int mode)

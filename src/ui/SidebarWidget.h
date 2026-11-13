@@ -24,6 +24,7 @@ private:
     QToolButton *m_moreBtn;
 
     void setupUi();
+    void restyle();
     QToolButton* createNavButton(const QString &text, const QString &iconName, int index);
 };
 

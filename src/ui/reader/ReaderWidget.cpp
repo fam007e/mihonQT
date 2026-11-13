@@ -1,5 +1,7 @@
 #include "ReaderWidget.h"
 #include "ReaderSettingsOverlay.h"
+#include "ReaderBarsOverlay.h"
+#include "../ThemeManager.h"
 #include "../../model/Manga.h"
 #include "../../model/Chapter.h"
 #include "../../model/ChapterSort.h"
@@ -90,6 +92,37 @@ ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
     setFocusPolicy(Qt::StrongFocus); // Enable focus for key events
 
     reloadSettings();
+
+    // --- Mihon-style reader chrome ---
+    // Dim layer for custom brightness (kept above pages, below overlays)
+    m_brightnessOverlay = new QWidget(this);
+    m_brightnessOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_brightnessOverlay->setGeometry(rect());
+
+    // Top/bottom bars overlay (back, chapter title, page slider, chapter skip)
+    m_barsOverlay = new ReaderBarsOverlay(this);
+    m_barsOverlay->setGeometry(rect());
+    connect(m_barsOverlay, &ReaderBarsOverlay::backRequested, this, &ReaderWidget::navigateBack);
+    connect(m_barsOverlay, &ReaderBarsOverlay::previousChapterRequested, this, [this]() {
+        if (hasPreviousChapter()) emit requestPreviousChapter(m_currentChapterId);
+    });
+    connect(m_barsOverlay, &ReaderBarsOverlay::nextChapterRequested, this, [this]() {
+        if (hasNextChapter()) emit requestNextChapter(m_currentChapterId);
+    });
+    connect(m_barsOverlay, &ReaderBarsOverlay::pageSelected, this, [this](int page) {
+        page = qBound(0, page, m_loadedPages.size() - 1);
+        m_currentPageIndex = page;
+        if (m_readingMode == Webtoon) {
+            if (page >= 0 && page < m_webtoonLabels.size() && m_webtoonLabels[page])
+                m_scrollArea->ensureWidgetVisible(m_webtoonLabels[page]);
+        } else {
+            updateView();
+        }
+        updateBarsOverlay();
+    });
+
+    m_brightness = PreferenceManager::instance().value("reader/brightness", 100).toInt();
+    applyBrightness();
 }
 
 ReaderWidget::~ReaderWidget()
@@ -466,6 +499,8 @@ void ReaderWidget::displayPage(const QImage& image, int pageIndex)
             updateView();
         }
     }
+
+    updateBarsOverlay();
 }
 
 void ReaderWidget::updateWebtoonView()
@@ -538,7 +573,13 @@ void ReaderWidget::keyPressEvent(QKeyEvent *event)
         emit navigateBack();
         break;
     case Qt::Key_Escape:
-        emit navigateBack();
+        // Mihon: Esc closes the open overlay first, then exits the reader
+        if ((m_settingsOverlay && m_settingsOverlay->isVisible()) ||
+            (m_barsOverlay && m_barsOverlay->isVisible())) {
+            hideSettingsOverlay();
+        } else {
+            emit navigateBack();
+        }
         break;
     default:
         QWidget::keyPressEvent(event);
@@ -874,6 +915,10 @@ void ReaderWidget::updateView()
 void ReaderWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    if (m_brightnessOverlay)
+        m_brightnessOverlay->setGeometry(rect());
+    if (m_barsOverlay)
+        m_barsOverlay->setGeometry(rect());
     if (m_readingMode != Webtoon) {
         updateView();
     } else {
@@ -918,6 +963,7 @@ void ReaderWidget::showSettingsOverlay()
         connect(m_settingsOverlay, &ReaderSettingsOverlay::scaleTypeChanged, this, &ReaderWidget::onScaleTypeChanged);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::firstPageCoverChanged, this, &ReaderWidget::onFirstPageCoverChanged);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::autoWideDetectChanged, this, &ReaderWidget::onAutoWideDetectChanged);
+        connect(m_settingsOverlay, &ReaderSettingsOverlay::brightnessChanged, this, &ReaderWidget::onBrightnessChanged);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::closeRequested, this, &ReaderWidget::hideSettingsOverlay);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::backToLibraryRequested, this, &ReaderWidget::navigateBack);
     } else {
@@ -927,6 +973,8 @@ void ReaderWidget::showSettingsOverlay()
         m_settingsOverlay->setAutoWideDetect(m_autoWideDetect);
     }
 
+    m_settingsOverlay->setCurrentBrightness(m_brightness);
+
     // Position in center
     m_settingsOverlay->adjustSize(); // Fixes "blank menu" by ensuring dimensions are calculated
     int x = (this->width() - m_settingsOverlay->width()) / 2;
@@ -935,6 +983,14 @@ void ReaderWidget::showSettingsOverlay()
     m_settingsOverlay->show();
     m_settingsOverlay->raise();
     m_settingsOverlay->activateWindow();
+
+    // Show the Mihon-style bars chrome alongside the settings panel
+    if (m_barsOverlay) {
+        updateBarsOverlay();
+        m_barsOverlay->setGeometry(rect());
+        m_barsOverlay->show();
+        m_barsOverlay->raise();
+    }
 }
 
 void ReaderWidget::hideSettingsOverlay()
@@ -942,6 +998,53 @@ void ReaderWidget::hideSettingsOverlay()
     if (m_settingsOverlay) {
         m_settingsOverlay->hide();
     }
+    if (m_barsOverlay) {
+        m_barsOverlay->hide();
+    }
+}
+
+void ReaderWidget::onBrightnessChanged(int value)
+{
+    m_brightness = value;
+    PreferenceManager::instance().setValue("reader/brightness", value);
+    applyBrightness();
+}
+
+void ReaderWidget::applyBrightness()
+{
+    if (!m_brightnessOverlay) return;
+    // 100 = no dimming; 10 = almost black (matches Mihon's custom brightness)
+    int alpha = qBound(0, (100 - m_brightness) * 255 / 100, 255);
+    if (alpha > 0) {
+        QColor dim(Qt::black);
+        dim.setAlpha(alpha);
+        QPalette p = m_brightnessOverlay->palette();
+        p.setColor(QPalette::Window, dim);
+        m_brightnessOverlay->setAutoFillBackground(true);
+        m_brightnessOverlay->setPalette(p);
+        m_brightnessOverlay->show();
+    } else {
+        m_brightnessOverlay->hide();
+    }
+}
+
+void ReaderWidget::updateBarsOverlay()
+{
+    if (!m_barsOverlay) return;
+
+    // Chapter title
+    for (const Chapter& ch : m_chapters) {
+        if (ch.id() == m_currentChapterId) {
+            m_barsOverlay->setChapterTitle(ch.name());
+            break;
+        }
+    }
+
+    m_barsOverlay->setPageInfo(m_currentPageIndex, m_loadedPages.size());
+    bool rtl = (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread);
+    m_barsOverlay->setRtl(rtl);
+    m_barsOverlay->setHasPreviousChapter(hasPreviousChapter());
+    m_barsOverlay->setHasNextChapter(hasNextChapter());
 }
 
 void ReaderWidget::toggleSettingsOverlay()

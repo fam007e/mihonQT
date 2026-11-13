@@ -1,9 +1,14 @@
 #include "SidebarWidget.h"
+#include "ThemeManager.h"
 
 SidebarWidget::SidebarWidget(QWidget *parent)
     : QWidget(parent)
 {
     setupUi();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
+        restyle();
+    });
+    restyle();
 }
 
 void SidebarWidget::setupUi()
@@ -43,25 +48,6 @@ QToolButton* SidebarWidget::createNavButton(const QString &text, const QString &
     btn->setFixedSize(70, 60); // Size for the rail item
     btn->setCursor(Qt::PointingHandCursor);
 
-    // Navigation Rail pill style
-    btn->setStyleSheet(
-        "QToolButton { "
-        "   border: none; "
-        "   color: #D8DEE9; " // Inactive text
-        "   font-size: 11px; "
-        "   font-weight: 500; "
-        "   border-radius: 16px; " // Pill shape for icon background
-        "   padding: 4px; "
-        "}"
-        "QToolButton:checked { "
-        "   background-color: #88C0D0; " // Pill background (primary color)
-        "   color: #2E3440; "            // Active text color
-        "}"
-        "QToolButton:hover { "
-        "   background-color: rgba(136, 192, 208, 0.15); "
-        "}"
-    );
-
     if (index == 0) btn->setChecked(true); // Default
 
     connect(btn, &QToolButton::clicked, this, [this, index]() {
@@ -69,4 +55,34 @@ QToolButton* SidebarWidget::createNavButton(const QString &text, const QString &
     });
 
     return btn;
+}
+
+void SidebarWidget::restyle()
+{
+    // M3 Navigation Rail (Mihon): rounded pill behind the icon of the
+    // selected item, colored with secondaryContainer like the nav bar.
+    const M3Colors& c = ThemeManager::instance().colors();
+    QString qss = QStringLiteral(
+        "QToolButton { "
+        "   border: none; "
+        "   color: %1; "                  // onSurfaceVariant for inactive
+        "   font-size: 11px; "
+        "   font-weight: 500; "
+        "   border-radius: 16px; "
+        "   padding: 4px; "
+        "   background: transparent; "
+        "}"
+        "QToolButton:checked { "
+        "   background-color: %4; "       // secondaryContainer pill (Mihon nav bar)
+        "   color: %2; "                  // onSecondaryContainer
+        "}"
+        "QToolButton:hover:!checked { "
+        "   background-color: %3; "
+        "}")
+        .arg(c.onSurfaceVariant.name(),
+             c.onSecondaryContainer.name(),
+             ThemeManager::rgba(c.onSurface, 0.12f),
+             c.secondaryContainer.name());
+    for (QToolButton *b : findChildren<QToolButton*>())
+        b->setStyleSheet(qss);
 }

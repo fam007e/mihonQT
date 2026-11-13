@@ -36,6 +36,7 @@ protected:
 
 private:
     void setupUi();
+    void restyle();
 
     SourceBase *m_source = nullptr;
 

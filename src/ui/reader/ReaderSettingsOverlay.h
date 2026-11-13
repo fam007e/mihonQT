@@ -35,6 +35,7 @@ signals:
 
 private:
     void setupUi();
+    void restyle();
     void updateDoublePageControlsVisibility(int mode);
 
     QComboBox *m_readingModeCombo;
