@@ -2,20 +2,23 @@
 #define UIUTILS_H
 
 #include <QListWidget>
+#include "ThemeManager.h"
 
 class UiUtils
 {
 public:
     static void applyListWidgetStyle(QListWidget *listWidget)
     {
-        listWidget->setAlternatingRowColors(true);
-        listWidget->setStyleSheet(
-            "QListWidget { background-color: #2E3440; border: none; outline: none; }"
-            "QListWidget::item { padding: 12px; border-bottom: 1px solid #3B4252; color: #ECEFF4; }"
-            "QListWidget::item:alternate { background-color: #3B4252; }"
-            "QListWidget::item:selected { background-color: #4C566A; color: #88C0D0; }"
-            "QListWidget::item:hover { background-color: #434C5E; }"
-        );
+        listWidget->setAlternatingRowColors(false);
+        listWidget->setStyleSheet(QStringLiteral(
+            "QListWidget { background-color: transparent; border: none; outline: none; }"
+            "QListWidget::item { padding: 12px; border-radius: 10px; color: %1; }"
+            "QListWidget::item:hover { background-color: %2; }"
+            "QListWidget::item:selected { background-color: %3; color: %4; }")
+            .arg(ThemeManager::instance().colors().onSurface.name(),
+                 ThemeManager::rgba(ThemeManager::instance().colors().onSurface, 0.10f),
+                 ThemeManager::instance().colors().secondaryContainer.name(),
+                 ThemeManager::instance().colors().onSecondaryContainer.name()));
     }
 
     static void setPlaceholderText(QListWidget *listWidget, const QString &text)
@@ -24,7 +27,7 @@ public:
         QListWidgetItem *item = new QListWidgetItem(text, listWidget);
         item->setTextAlignment(Qt::AlignCenter);
         item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
-        item->setForeground(QColor("#6B7280"));
+        item->setForeground(ThemeManager::instance().colors().onSurfaceVariant);
     }
 };
 

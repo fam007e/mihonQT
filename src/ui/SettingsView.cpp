@@ -168,6 +168,7 @@ void SettingsView::createAppearancePage() {
   QLabel *themeLabel = new QLabel("Application Theme:", this);
   m_themeComboBox = new QComboBox(this);
   // Order must match ThemeManager::Theme enum
+  m_themeComboBox->addItem("Mihon Default");
   m_themeComboBox->addItem("Nord Dark");
   m_themeComboBox->addItem("Nord Light");
   m_themeComboBox->addItem("Catppuccin Mocha");

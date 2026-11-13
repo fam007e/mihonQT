@@ -1,4 +1,5 @@
 #include "SourceBrowseView.h"
+#include "ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMouseEvent>
@@ -10,6 +11,9 @@ SourceBrowseView::SourceBrowseView(QWidget *parent)
     : QWidget(parent)
 {
     setupUi();
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
+        restyle();
+    });
 }
 
 void SourceBrowseView::setupUi()
@@ -18,39 +22,45 @@ void SourceBrowseView::setupUi()
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Header Toolbar
+    // Header Toolbar (Mihon source toolbar: back arrow | source name)
     QWidget *header = new QWidget(this);
-    header->setStyleSheet("background-color: #3B4252; padding: 10px;");
+    header->setFixedHeight(56);
     QHBoxLayout *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(8, 0, 16, 0);
 
-    QPushButton *backBtn = new QPushButton("Back", this);
+    QPushButton *backBtn = new QPushButton("←", this);
+    backBtn->setFlat(true);
+    backBtn->setProperty("flatIcon", true);
+    backBtn->setFixedSize(40, 40);
+    backBtn->setCursor(Qt::PointingHandCursor);
     connect(backBtn, &QPushButton::clicked, this, &SourceBrowseView::backRequested);
     headerLayout->addWidget(backBtn);
 
     m_sourceNameLabel = new QLabel("Source", this);
-    m_sourceNameLabel->setStyleSheet("font-weight: bold; font-size: 16px; color: #ECEFF4;");
-    headerLayout->addWidget(m_sourceNameLabel);
-    headerLayout->addStretch();
+    headerLayout->addWidget(m_sourceNameLabel, 1);
 
     mainLayout->addWidget(header);
 
     // Search and Filter Bar
     QWidget *searchBar = new QWidget(this);
-    searchBar->setStyleSheet("background-color: #2E3440; padding: 10px; border-bottom: 1px solid #3B4252;");
     QVBoxLayout *searchLayout = new QVBoxLayout(searchBar);
+    searchLayout->setContentsMargins(16, 4, 16, 10);
+    searchLayout->setSpacing(10);
 
     m_searchEdit = new QLineEdit(this);
-    m_searchEdit->setPlaceholderText("Search...");
-    m_searchEdit->setStyleSheet("padding: 8px; background-color: #3B4252; color: white; border: none; border-radius: 4px;");
+    m_searchEdit->setPlaceholderText("Search source...");
+    m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->setFixedHeight(40);
     connect(m_searchEdit, &QLineEdit::returnPressed, this, &SourceBrowseView::onSearchTriggered);
     searchLayout->addWidget(m_searchEdit);
 
     QHBoxLayout *filterLayout = new QHBoxLayout();
     m_popularBtn = new QPushButton("Popular", this);
     m_latestBtn = new QPushButton("Latest", this);
-
-    m_popularBtn->setStyleSheet("padding: 5px 15px; background-color: #4C566A; border-radius: 4px;");
-    m_latestBtn->setStyleSheet("padding: 5px 15px; background-color: #4C566A; border-radius: 4px;");
+    m_popularBtn->setCheckable(true);
+    m_latestBtn->setCheckable(true);
+    m_popularBtn->setCursor(Qt::PointingHandCursor);
+    m_latestBtn->setCursor(Qt::PointingHandCursor);
 
     connect(m_popularBtn, &QPushButton::clicked, this, &SourceBrowseView::onPopularClicked);
     connect(m_latestBtn, &QPushButton::clicked, this, &SourceBrowseView::onLatestClicked);
@@ -67,13 +77,11 @@ void SourceBrowseView::setupUi()
     m_progressBar->setRange(0, 0); // indeterminate
     m_progressBar->setFixedHeight(4);
     m_progressBar->setTextVisible(false);
-    m_progressBar->setStyleSheet("QProgressBar { border: none; background: #2E3440; } QProgressBar::chunk { background: #88C0D0; }");
     m_progressBar->hide();
     mainLayout->addWidget(m_progressBar);
 
     m_statusLabel = new QLabel(this);
     m_statusLabel->setAlignment(Qt::AlignCenter);
-    m_statusLabel->setStyleSheet("color: #D8DEE9; padding: 10px; font-size: 14px;");
     m_statusLabel->hide();
     mainLayout->addWidget(m_statusLabel);
 
@@ -84,6 +92,31 @@ void SourceBrowseView::setupUi()
     mainLayout->addWidget(m_mangaListView);
 
     connect(&m_watcher, &QFutureWatcher<QList<Manga>>::finished, this, &SourceBrowseView::onMangaFetchFinished);
+
+    restyle();
+}
+
+void SourceBrowseView::restyle()
+{
+    const M3Colors& c = ThemeManager::instance().colors();
+    m_sourceNameLabel->setStyleSheet(QStringLiteral(
+        "background: transparent; font-weight: 600; font-size: 17px; color: %1;")
+        .arg(c.onBackground.name()));
+    m_statusLabel->setStyleSheet(QStringLiteral(
+        "background: transparent; color: %1; padding: 10px; font-size: 14px;")
+        .arg(c.onSurfaceVariant.name()));
+
+    // Popular/Latest act as filter chips: checked = secondaryContainer pill
+    QString chipQss = QStringLiteral(
+        "QPushButton { background: transparent; border: 1px solid %1; border-radius: 20px;"
+        "  color: %2; padding: 7px 18px; font-weight: 500; }"
+        "QPushButton:hover { background: %3; }"
+        "QPushButton:checked { background-color: %4; border-color: %4; color: %5; }")
+        .arg(c.outlineVariant.name(), c.onSurface.name(),
+             ThemeManager::rgba(c.onSurface, 0.08f),
+             c.secondaryContainer.name(), c.onSecondaryContainer.name());
+    m_popularBtn->setStyleSheet(chipQss);
+    m_latestBtn->setStyleSheet(chipQss);
 }
 
 void SourceBrowseView::mousePressEvent(QMouseEvent *event)
@@ -116,6 +149,9 @@ void SourceBrowseView::onSearchTriggered()
 {
     if (!m_source || m_watcher.isRunning()) return;
 
+    m_popularBtn->setChecked(false);
+    m_latestBtn->setChecked(false);
+
     QString query = m_searchEdit->text();
     m_progressBar->show();
     m_statusLabel->setText(QString("Searching \"%1\"...").arg(query));
@@ -135,6 +171,9 @@ void SourceBrowseView::onPopularClicked()
 {
     if (!m_source || m_watcher.isRunning()) return;
 
+    m_popularBtn->setChecked(true);
+    m_latestBtn->setChecked(false);
+
     m_progressBar->show();
     m_statusLabel->setText("Loading popular manga...");
     m_statusLabel->show();
@@ -152,6 +191,9 @@ void SourceBrowseView::onPopularClicked()
 void SourceBrowseView::onLatestClicked()
 {
     if (!m_source || m_watcher.isRunning()) return;
+
+    m_popularBtn->setChecked(false);
+    m_latestBtn->setChecked(true);
 
     m_progressBar->show();
     m_statusLabel->setText("Loading latest updates...");

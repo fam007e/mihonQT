@@ -18,6 +18,7 @@
 
 class LocalSource;
 class ReaderSettingsOverlay;
+class ReaderBarsOverlay;
 class SourceManager; // Forward decl
 
 class ReaderWidget : public QWidget
@@ -86,6 +87,9 @@ private:
     void onScaleTypeChanged(int type);
     void onFirstPageCoverChanged(bool enabled);
     void onAutoWideDetectChanged(bool enabled);
+    void onBrightnessChanged(int value);
+    void applyBrightness();
+    void updateBarsOverlay();
 
     struct SpreadInfo {
         int firstIndex = -1;
@@ -130,6 +134,9 @@ private:
     HistoryRepository *m_historyRepo;
 
     ReaderSettingsOverlay *m_settingsOverlay;
+    ReaderBarsOverlay *m_barsOverlay = nullptr;
+    QWidget *m_brightnessOverlay = nullptr; // dim layer (custom brightness)
+    int m_brightness = 100;
     long m_currentChapterId = -1;
     bool m_showingTransition = false;
 

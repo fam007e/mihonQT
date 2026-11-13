@@ -40,7 +40,7 @@ void MangaListView::populateManga(const QList<Manga>& mangaList)
     m_mangaList = mangaList;
 
     for (const Manga& manga : m_mangaList) {
-        MangaCoverCard *card = new MangaCoverCard(manga, 0, m_contentWidget);
+        MangaCoverCard *card = new MangaCoverCard(manga, 0, 0, QString(), m_contentWidget);
         connect(card, &MangaCoverCard::clicked, this, &MangaListView::mangaSelected);
         m_cards.append(card);
     }

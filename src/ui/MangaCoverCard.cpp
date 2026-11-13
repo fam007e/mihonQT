@@ -1,193 +1,223 @@
 #include "MangaCoverCard.h"
+#include "../util/CoverCache.h"
+#include "ThemeManager.h"
 #include <QMouseEvent>
 #include <QPainter>
-#include <QGraphicsDropShadowEffect>
+#include <QPainterPath>
 #include <QDir>
 #include <QFileInfo>
-#include <QApplication>
-#include "../util/ImageUtil.h"
+#include <QFontMetrics>
+#include <QVBoxLayout>
 
-QNetworkAccessManager* MangaCoverCard::coverNetworkManager()
+// Static rounded-corner cover pixmap (Mihon clips covers to a small shape radius).
+static QPixmap roundedCover(const QPixmap& src, int w, int h, int radius)
 {
-    // Shared QNAM for all cover downloads, lives on the main thread.
-    static QNetworkAccessManager* s_nam = new QNetworkAccessManager(qApp);
-    return s_nam;
+    QPixmap scaled = src.scaled(w, h, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+    QPixmap out(w, h);
+    out.fill(Qt::transparent);
+
+    QPainter p(&out);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPainterPath path;
+    path.addRoundedRect(0, 0, w, h, radius, radius);
+    p.setClipPath(path);
+    p.drawPixmap((w - scaled.width()) / 2, (h - scaled.height()) / 2, scaled);
+    p.end();
+    return out;
 }
 
-MangaCoverCard::MangaCoverCard(const Manga& manga, int unreadCount, QWidget *parent)
+MangaCoverCard::MangaCoverCard(const Manga& manga, int unreadCount, int downloadCount,
+                               const QString& languageBadge, QWidget *parent)
     : QFrame(parent)
     , m_manga(manga)
     , m_unreadCount(unreadCount)
+    , m_downloadCount(downloadCount)
+    , m_languageBadge(languageBadge)
 {
     setupUi();
-
-    QString thumb = m_manga.thumbnailUrl();
-    if (thumb.isEmpty() && m_manga.source() == 0) {
-        // Fallback for existing library items: search the manga directory
-        QDir dir(m_manga.url());
-        QStringList filters = {"cover.*", "folder.*", "poster.*", "*.jpg", "*.png", "*.jpeg"};
-        QFileInfoList list = dir.entryInfoList(filters, QDir::Files, QDir::Name);
-        if (!list.isEmpty()) {
-            thumb = list.first().absoluteFilePath();
-        }
-    }
-
-    if (!thumb.isEmpty()) {
-        if (thumb.startsWith("http://") || thumb.startsWith("https://")) {
-            // Async download for web URLs
-            fetchCoverFromUrl(thumb);
-        } else {
-            // Local file path
-            QPixmap pixmap(thumb);
-            if (!pixmap.isNull()) {
-                setCoverImage(pixmap);
-            }
-        }
-    }
-}
-
-void MangaCoverCard::fetchCoverFromUrl(const QString& url)
-{
-    QNetworkRequest request{QUrl(url)};
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-        QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"));
-    // Allow redirects (some CDNs redirect)
-    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::NoLessSafeRedirectPolicy);
-
-    QNetworkReply* reply = coverNetworkManager()->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
-        reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            qWarning() << "Cover download failed for" << m_manga.title() << ":" << reply->errorString();
-            return;
-        }
-        QByteArray data = reply->readAll();
-        QPixmap pixmap = ImageUtil::loadPixmapFromData(data);
-        if (!pixmap.isNull()) {
-            setCoverImage(pixmap);
-            // qDebug() << "Cover loaded for" << m_manga.title();
-        } else {
-            qWarning() << "Failed to decode cover image for" << m_manga.title();
-        }
+    loadCover();
+    connect(&CoverCache::instance(), &CoverCache::loaded, this, [this](const QString& url, const QPixmap& pm) {
+        if (url == m_manga.thumbnailUrl())
+            setCoverImage(pm);
     });
 }
 
 void MangaCoverCard::setupUi()
 {
-    setFixedSize(130, 210); // Updated to accommodate 2:3 ratio (120x180 + margins)
     setFrameShape(QFrame::NoFrame);
     setCursor(Qt::PointingHandCursor);
+    setFixedSize(CoverW + 8, CoverH + 8 + 34); // cover + margins + two-line title
 
-    // Main layout
     QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(5, 5, 5, 5);
-    layout->setSpacing(4);
+    layout->setContentsMargins(4, 4, 4, 0);
+    layout->setSpacing(3);
 
-    // Cover image container
+    // --- Cover container ---
     QWidget *coverContainer = new QWidget(this);
-    coverContainer->setFixedSize(120, 180); // 2:3 aspect ratio
-    coverContainer->setStyleSheet(
-        "background-color: #3B4252;"
-        "border-radius: 8px;"
-    );
+    coverContainer->setFixedSize(CoverW + 4, CoverH + 4);
 
-    // Cover label (inside container)
     m_coverLabel = new QLabel(coverContainer);
-    m_coverLabel->setFixedSize(120, 180);
+    m_coverLabel->setGeometry(2, 2, CoverW, CoverH);
     m_coverLabel->setAlignment(Qt::AlignCenter);
-    m_coverLabel->setScaledContents(true);
-    m_coverLabel->setStyleSheet("border-radius: 8px;");
+    // Placeholder while loading: dim surface container
+    QPixmap placeholder(CoverW, CoverH);
+    placeholder.fill(ThemeManager::instance().colors().surfaceContainerHigh);
+    m_coverLabel->setPixmap(roundedCover(placeholder, CoverW, CoverH, 6));
 
-    // Title overlay at bottom of cover
-    m_titleLabel = new QLabel(m_manga.title(), coverContainer);
-    m_titleLabel->setWordWrap(true);
-    m_titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignBottom);
-    m_titleLabel->setFixedSize(120, 60);
-    m_titleLabel->move(0, 120);
-    m_titleLabel->setStyleSheet(
-        "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, "
-        "   stop:0 transparent, stop:0.3 rgba(0,0,0,0.66), stop:1 rgba(0,0,0,0.8));" // Matching Compose alpha
-        "color: white;"
-        "font-size: 11px;"
-        "font-weight: bold;"
-        "padding: 6px 6px;"
-        "border-bottom-left-radius: 8px;"
-        "border-bottom-right-radius: 8px;"
-    );
+    // Badge chips (Mihon: badges sit on top of the cover)
+    m_badgeStartLabel = new QLabel(coverContainer);
+    m_badgeStartLabel->move(2, 2);
+    m_badgeStartLabel->setAlignment(Qt::AlignCenter);
 
-    // Unread badge (top left corner)
-    m_badgeLabel = new QLabel(coverContainer);
-    m_badgeLabel->setAlignment(Qt::AlignCenter);
-    m_badgeLabel->setFixedSize(28, 20);
-    m_badgeLabel->move(0, 0); // Top Left
-    m_badgeLabel->setStyleSheet(
-        "background-color: #88C0D0;"
-        "color: #2E3440;"
-        "font-size: 11px;"
-        "font-weight: bold;"
-        "border-top-left-radius: 8px;" // Match card corner
-        "border-bottom-right-radius: 8px;"
-        "padding: 2px 4px;"
-    );
-    updateBadge();
+    m_badgeEndLabel = new QLabel(coverContainer);
+    m_badgeEndLabel->setAlignment(Qt::AlignCenter);
 
     layout->addWidget(coverContainer);
 
-    // Add shadow effect
-    QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(10);
-    shadow->setOffset(2, 2);
-    shadow->setColor(QColor(0, 0, 0, 80));
-    coverContainer->setGraphicsEffect(shadow);
+    // --- Title below the cover (Mihon comfortable grid) ---
+    m_titleLabel = new QLabel(this);
+    m_titleLabel->setWordWrap(false); // we do manual 2-line eliding
+    m_titleLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+    m_titleLabel->setFixedHeight(30);
+    layout->addWidget(m_titleLabel);
 
-    // Hover effect via stylesheet
-    setStyleSheet(
-        "MangaCoverCard { background: transparent; }"
-        "MangaCoverCard:hover { background-color: rgba(136, 192, 208, 0.1); border-radius: 8px; }"
-    );
+    updateTitle();
+    updateBadges();
+    restyle();
+}
+
+void MangaCoverCard::restyle()
+{
+    const M3Colors& c = ThemeManager::instance().colors();
+
+    // Badges: unread = secondary, downloads = tertiary (Mihon LibraryBadges.kt)
+    QString badgeQss = QStringLiteral(
+        "QLabel { border-radius: 4px; font-size: 10px; font-weight: 600; padding: 2px 5px; }");
+    if (m_downloadCount > 0 && m_unreadCount > 0) {
+        // Two chips side by side: draw as colored text spans
+        m_badgeStartLabel->setText(QStringLiteral(
+            "<span style=\"background-color:%1; color:%2;\">&nbsp;%3&nbsp;</span>"
+            "<span style=\"background-color:%4; color:%5;\">&nbsp;%6&nbsp;</span>")
+            .arg(c.tertiary.name(), c.onTertiary.name(), QString::number(m_downloadCount),
+                 c.secondary.name(), c.onSecondary.name(), QString::number(m_unreadCount)));
+        m_badgeStartLabel->setStyleSheet(badgeQss + "QLabel { background: transparent; }");
+    } else if (m_unreadCount > 0) {
+        m_badgeStartLabel->setText(QString::number(m_unreadCount));
+        m_badgeStartLabel->setStyleSheet(badgeQss +
+            QStringLiteral("QLabel { background-color: %1; color: %2; }")
+                .arg(c.secondary.name(), c.onSecondary.name()));
+    } else if (m_downloadCount > 0) {
+        m_badgeStartLabel->setText(QString::number(m_downloadCount));
+        m_badgeStartLabel->setStyleSheet(badgeQss +
+            QStringLiteral("QLabel { background-color: %1; color: %2; }")
+                .arg(c.tertiary.name(), c.onTertiary.name()));
+    }
+    m_badgeStartLabel->adjustSize();
+
+    // Language badge (top-end, tertiary like Mihon LanguageBadge)
+    if (!m_languageBadge.isEmpty()) {
+        m_badgeEndLabel->setText(m_languageBadge.toUpper());
+        m_badgeEndLabel->setStyleSheet(badgeQss +
+            QStringLiteral("QLabel { background-color: %1; color: %2; }")
+                .arg(c.tertiary.name(), c.onTertiary.name()));
+        m_badgeEndLabel->adjustSize();
+        m_badgeEndLabel->move(width() - m_badgeEndLabel->width() - 4, 2);
+        m_badgeEndLabel->show();
+    } else {
+        m_badgeEndLabel->hide();
+    }
+
+    m_titleLabel->setStyleSheet(
+        QStringLiteral("color: %1; font-size: 12px;").arg(c.onSurface.name()));
+}
+
+void MangaCoverCard::updateTitle()
+{
+    const QFontMetrics fm(m_titleLabel->font());
+    QString t = m_manga.title();
+    // Manual 2-line elide
+    if (fm.horizontalAdvance(t) <= CoverW) {
+        m_titleLabel->setText(t);
+        return;
+    }
+    // Split roughly in half for two lines, elide second
+    int mid = qBound(1, t.length() / 2, t.length() - 1);
+    int breakAt = t.lastIndexOf(' ', mid);
+    if (breakAt <= 0) breakAt = mid;
+    QString line1 = t.left(breakAt).trimmed();
+    QString rest = t.mid(breakAt).trimmed();
+    QString line2 = rest.length() > CoverW
+        ? fm.elidedText(rest, Qt::ElideRight, CoverW)
+        : rest;
+    m_titleLabel->setText(line1 + "\n" + line2);
+}
+
+void MangaCoverCard::updateBadges()
+{
+    restyle();
+}
+
+void MangaCoverCard::loadCover()
+{
+    QString thumb = m_manga.thumbnailUrl();
+    if (thumb.isEmpty() && m_manga.source() == 0) {
+        // Local-source fallback: look for a cover file in the manga directory
+        QDir dir(m_manga.url());
+        QStringList filters = {"cover.*", "folder.*", "poster.*", "*.jpg", "*.png", "*.jpeg"};
+        QFileInfoList list = dir.entryInfoList(filters, QDir::Files, QDir::Name);
+        if (!list.isEmpty())
+            thumb = list.first().absoluteFilePath();
+    }
+    if (thumb.isEmpty())
+        return;
+
+    if (thumb.startsWith("http://") || thumb.startsWith("https://")) {
+        QPixmap cached = CoverCache::instance().load(thumb);
+        if (!cached.isNull())
+            setCoverImage(cached);
+    } else {
+        QPixmap pm(thumb);
+        if (!pm.isNull())
+            setCoverImage(pm);
+    }
 }
 
 void MangaCoverCard::setUnreadCount(int count)
 {
     m_unreadCount = count;
-    updateBadge();
+    updateBadges();
+}
+
+void MangaCoverCard::setDownloadCount(int count)
+{
+    m_downloadCount = count;
+    updateBadges();
 }
 
 void MangaCoverCard::setCoverImage(const QPixmap& pixmap)
 {
-    if (!pixmap.isNull()) {
-        m_coverLabel->setPixmap(pixmap.scaled(120, 180, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
-    }
-}
-
-void MangaCoverCard::updateBadge()
-{
-    if (m_unreadCount > 0) {
-        m_badgeLabel->setText(QString::number(m_unreadCount));
-        m_badgeLabel->show();
-    } else {
-        m_badgeLabel->hide();
-    }
+    if (!pixmap.isNull())
+        m_coverLabel->setPixmap(roundedCover(pixmap, CoverW, CoverH, 6));
 }
 
 void MangaCoverCard::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton) {
+    if (event->button() == Qt::LeftButton)
         emit clicked(m_manga);
-    }
     QFrame::mousePressEvent(event);
 }
 
 void MangaCoverCard::enterEvent(QEnterEvent *event)
 {
-    // Optional: Add animation or visual feedback
+    // Subtle lift like Mihon's cover press/hover feedback
+    const M3Colors& c = ThemeManager::instance().colors();
+    setStyleSheet(QStringLiteral("MangaCoverCard { background-color: %1; border-radius: 10px; }")
+                      .arg(ThemeManager::rgba(c.onSurface, 0.08f)));
     QFrame::enterEvent(event);
 }
 
 void MangaCoverCard::leaveEvent(QEvent *event)
 {
-    // Optional: Remove animation or visual feedback
+    setStyleSheet("MangaCoverCard { background: transparent; }");
     QFrame::leaveEvent(event);
 }

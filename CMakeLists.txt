@@ -38,9 +38,11 @@ add_executable(MihonQT
     src/source/JavascriptSource.cpp # Add JavascriptSource.cpp
     src/source/HtmlParser.cpp # Add HtmlParser.cpp
     src/util/ImageUtil.cpp # WebP and Image utility
+    src/util/CoverCache.cpp # Cover memory+disk cache
     src/network/NetworkAccessManager.cpp # Add NetworkAccessManager.cpp
     src/ui/reader/ReaderWidget.cpp
     src/ui/reader/ReaderSettingsOverlay.cpp
+    src/ui/reader/ReaderBarsOverlay.cpp
     src/ui/SourceListView.cpp
     src/ui/MangaListView.cpp
     src/ui/MangaDetailsView.cpp

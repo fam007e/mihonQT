@@ -269,12 +269,16 @@ void MainWindow::setupUi()
 
     // Theme Menu
     QMenu *themeMenu = menuBar()->addMenu("&Theme");
+    QAction *mihonDefaultAction = themeMenu->addAction("Mihon Default");
     QAction *nordDarkAction = themeMenu->addAction("Nord Dark");
     QAction *nordLightAction = themeMenu->addAction("Nord Light");
     QAction *catppuccinAction = themeMenu->addAction("Catppuccin Mocha");
     QAction *tokyoNightAction = themeMenu->addAction("Tokyo Night");
     QAction *draculaAction = themeMenu->addAction("Dracula");
 
+    connect(mihonDefaultAction, &QAction::triggered, this, []() {
+        ThemeManager::instance().applyTheme(ThemeManager::MihonDefault);
+    });
     connect(nordDarkAction, &QAction::triggered, this, []() {
         ThemeManager::instance().applyTheme(ThemeManager::NordDark);
     });
@@ -291,8 +295,8 @@ void MainWindow::setupUi()
         ThemeManager::instance().applyTheme(ThemeManager::Dracula);
     });
 
-    // Apply default theme
-    ThemeManager::instance().applyTheme(ThemeManager::NordDark);
+    // Apply default theme (Mihon Default, matching the Android app)
+    ThemeManager::instance().applyTheme(ThemeManager::MihonDefault);
 }
 
 void MainWindow::onSourceSelected(long sourceId)
