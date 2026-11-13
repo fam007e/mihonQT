@@ -15,7 +15,9 @@ QImage ImageUtil::loadFromData(const QByteArray& data)
     int width = 0, height = 0;
     const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data.constData());
     if (WebPGetInfo(bytes, data.size(), &width, &height)) {
+        if (width <= 0 || height <= 0) return QImage();
         QImage webpImg(width, height, QImage::Format_RGBA8888);
+        if (webpImg.isNull()) return QImage();
         if (WebPDecodeRGBAInto(bytes, data.size(), webpImg.bits(), webpImg.sizeInBytes(), webpImg.bytesPerLine())) {
             return webpImg;
         }
