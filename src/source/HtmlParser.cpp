@@ -320,6 +320,7 @@ QVariantList HtmlElement::select(const QString& selector)
     QVariantList result;
     result.reserve(list.size());
     for (HtmlElement* el : list) {
+        el->setParent(this);
         result.append(QVariant::fromValue<QObject*>(el));
     }
     return result;
@@ -329,7 +330,12 @@ QObject* HtmlElement::first(const QString& selector)
 {
     QList<HtmlElement*> list = HtmlParser::query(m_doc, m_node, selector);
     if (!list.isEmpty()) {
-        return list.first();
+        HtmlElement* firstEl = list.first();
+        firstEl->setParent(this);
+        for (int i = 1; i < list.size(); ++i) {
+            delete list[i];
+        }
+        return firstEl;
     }
     return nullptr;
 }
@@ -378,6 +384,7 @@ QVariantList HtmlParser::select(const QString& html, const QString& selector)
     QVariantList result;
     result.reserve(list.size());
     for (HtmlElement* el : list) {
+        el->setParent(this);
         result.append(QVariant::fromValue<QObject*>(el));
     }
     return result;
@@ -392,7 +399,12 @@ QObject* HtmlParser::first(const QString& html, const QString& selector)
 
     QList<HtmlElement*> list = query(doc, doc->output->root, selector);
     if (!list.isEmpty()) {
-        return list.first();
+        HtmlElement* firstEl = list.first();
+        firstEl->setParent(this);
+        for (int i = 1; i < list.size(); ++i) {
+            delete list[i];
+        }
+        return firstEl;
     }
     return nullptr;
 }
