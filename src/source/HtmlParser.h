@@ -5,7 +5,16 @@
 #include <QString>
 #include <QList>
 #include <QVariant>
-#include <QRegularExpression>
+#include <memory>
+#include <gumbo.h>
+
+struct GumboOutputDeleter {
+    void operator()(GumboOutput* p) const {
+        if (p) {
+            gumbo_destroy_output(&kGumboDefaultOptions, p);
+        }
+    }
+};
 
 class HtmlElement : public QObject
 {
@@ -16,21 +25,24 @@ class HtmlElement : public QObject
     Q_PROPERTY(QString tagName READ tagName)
 
 public:
-    explicit HtmlElement(const QString& tag, const QString& attrStr, const QString& inner, QObject *parent = nullptr);
+    explicit HtmlElement(std::shared_ptr<GumboOutput> tree, const GumboNode* node, QObject *parent = nullptr);
 
-    QString text() const;
-    QString innerHtml() const { return m_innerHtml; }
-    QString outerHtml() const;
-    QString tagName() const { return m_tagName; }
+    Q_INVOKABLE QString text() const;
+    Q_INVOKABLE QString innerHtml() const;
+    Q_INVOKABLE QString outerHtml() const;
+    Q_INVOKABLE QString tagName() const;
 
-    Q_INVOKABLE QString attr(const QString& name);
-    Q_INVOKABLE QVariantList select(const QString& selector); // Returns list of HtmlElement*
+    Q_INVOKABLE QString attr(const QString& name) const;
+    Q_INVOKABLE bool hasAttr(const QString& name) const;
+    Q_INVOKABLE QVariantList select(const QString& selector);
     Q_INVOKABLE QObject* first(const QString& selector);
 
+    const GumboNode* node() const { return m_node; }
+    std::shared_ptr<GumboOutput> tree() const { return m_tree; }
+
 private:
-    QString m_tagName;
-    QString m_attributes;
-    QString m_innerHtml;
+    std::shared_ptr<GumboOutput> m_tree;
+    const GumboNode* m_node;
 
     friend class HtmlParser;
 };
@@ -45,8 +57,7 @@ public:
     Q_INVOKABLE QObject* first(const QString& html, const QString& selector);
     Q_INVOKABLE QObject* parse(const QString& html);
 
-    // Helper to generic parse
-    static QList<HtmlElement*> parse(const QString& html, const QString& selector);
+    static QList<HtmlElement*> query(std::shared_ptr<GumboOutput> tree, const GumboNode* root, const QString& selector);
 };
 
 #endif // HTMLPARSER_H
