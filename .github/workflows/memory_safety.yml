@@ -35,7 +35,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libxkbcommon-dev libgl1-mesa-dev cppcheck libquazip1-qt6-dev
+        sudo apt-get install -y build-essential cmake qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libxkbcommon-dev libgl1-mesa-dev cppcheck libquazip1-qt6-dev libgumbo-dev libwebp-dev
 
     - name: Configure CMake with AddressSanitizer
       run: >
@@ -55,7 +55,7 @@ jobs:
       run: |
         cppcheck --enable=all --suppressions-list=.cppcheck --quiet --error-exitcode=0 src/
 
-    - name: Run tests (if any)
-      # Add a step here to run your test suite
-      # For example: ctest --test-dir build
-      run: echo "No tests to run"
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure

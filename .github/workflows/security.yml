@@ -59,7 +59,7 @@ jobs:
       if: matrix.language == 'c-cpp'
       run: |
         sudo apt-get update
-        sudo apt-get install -y qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libxkbcommon-dev libgl1-mesa-dev cppcheck libquazip1-qt6-dev
+        sudo apt-get install -y qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libxkbcommon-dev libgl1-mesa-dev cppcheck libquazip1-qt6-dev libgumbo-dev libwebp-dev
 
     - name: Run cppcheck (C++ only)
       if: matrix.language == 'c-cpp'
@@ -71,7 +71,9 @@ jobs:
       if: matrix.language == 'c-cpp'
       uses: david-a-wheeler/flawfinder@8e4a779ad59dbfaee5da586aa9210853b701959c
       with:
-        arguments: '--sarif ./'
+        # Only scan first-party code; libs/quazip is vendored third-party
+        # (its findings are tracked upstream, not here).
+        arguments: '--sarif src/'
         output: 'flawfinder_results.sarif'
 
     - name: Upload flawfinder results (C++ only)
