@@ -1,5 +1,7 @@
 # CMake
 build/
+build-fuzz/
+.mimosa/
 CMakeCache.txt
 CMakeLists.txt.user
 CMakeFiles/
