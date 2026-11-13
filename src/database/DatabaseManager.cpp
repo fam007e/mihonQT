@@ -33,11 +33,13 @@ bool DatabaseManager::openDatabase(const QString& path)
 {
     m_db = QSqlDatabase::addDatabase("QSQLITE");
 
-    // Set database path in a standard location
-    QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(dbPath);
-    qDebug() << "Database path resolved to:" << dbPath + "/" + path; // Debug output
-    m_db.setDatabaseName(dbPath + "/" + path);
+    if (path == ":memory:" || QDir::isAbsolutePath(path)) {
+        m_db.setDatabaseName(path);
+    } else {
+        QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QDir().mkpath(dbPath);
+        m_db.setDatabaseName(dbPath + "/" + path);
+    }
 
     if (!m_db.open()) { // flawfinder: ignore
         qDebug() << "Error: connection with database failed:" << m_db.lastError().text();
@@ -61,6 +63,9 @@ QSqlDatabase& DatabaseManager::database() // Changed to return a non-const refer
 bool DatabaseManager::initializeDatabase()
 {
     QFile schemaFile(":/database/schema.sql");
+    if (!schemaFile.exists()) {
+        schemaFile.setFileName("src/database/schema.sql");
+    }
     if (!schemaFile.open(QIODevice::ReadOnly | QIODevice::Text)) { // flawfinder: ignore
         qDebug() << "Could not open schema.sql file.";
         return false;
