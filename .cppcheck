@@ -5,7 +5,10 @@
 unknownMacro
 
 # Missing include warnings - false positives with CMake
+# (cppcheck runs without Qt include paths; missingIncludeSystem is
+# informational only and floods the log otherwise)
 missingInclude
+missingIncludeSystem
 
 # Shadow function from emit - Qt signal macro false positive
 shadowFunction
