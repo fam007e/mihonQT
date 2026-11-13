@@ -56,6 +56,11 @@ jobs:
         cppcheck --enable=all --suppressions-list=.cppcheck --quiet --error-exitcode=0 src/
 
     - name: Run tests
+      env:
+        QT_QPA_PLATFORM: offscreen
+        # ASan leak-at-exit flags Qt/global singletons; use-after-free and
+        # other runtime checks stay enabled.
+        ASAN_OPTIONS: detect_leaks=0
       run: |
         cd build
         ctest --output-on-failure
