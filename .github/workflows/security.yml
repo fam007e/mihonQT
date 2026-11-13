@@ -21,6 +21,7 @@ on:
       - '.github/workflows/security.yml'
   schedule:
     - cron: '30 2 * * 1'
+  workflow_dispatch:
 
 jobs:
   analyze:
