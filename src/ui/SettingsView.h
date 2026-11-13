@@ -87,6 +87,8 @@ private:
     QCheckBox *m_keepScreenOnCheckBox;
     QCheckBox *m_showPageNumberCheckBox;
     QCheckBox *m_pageTransitionsCheckBox;
+    QCheckBox *m_firstPageCoverCheckBox;
+    QCheckBox *m_autoWideDetectCheckBox;
 
     // Paged Mode widgets
     QComboBox *m_scaleTypeComboBox;

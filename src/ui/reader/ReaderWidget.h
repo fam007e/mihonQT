@@ -82,6 +82,18 @@ private:
     void saveReadingProgress();
     void onReadingModeChanged(int mode);
     void onScaleTypeChanged(int type);
+    void onFirstPageCoverChanged(bool enabled);
+    void onAutoWideDetectChanged(bool enabled);
+
+    struct SpreadInfo {
+        int firstIndex = -1;
+        int secondIndex = -1;
+        int stepForward = 1;
+        bool isSingle = true;
+    };
+
+    SpreadInfo getSpreadInfo(int index) const;
+    int getPreviousSpreadIndex(int currentIndex) const;
 
     QVBoxLayout *m_mainLayout;
     QStackedWidget *m_viewStack;
@@ -103,6 +115,8 @@ private:
     int m_webtoonPadding;
     bool m_keepScreenOn;
     bool m_fullscreen;
+    bool m_firstPageCover;
+    bool m_autoWideDetect;
 
     Manga m_currentManga;
     QVector<Chapter> m_chapters;

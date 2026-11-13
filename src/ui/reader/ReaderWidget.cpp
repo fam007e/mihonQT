@@ -45,7 +45,9 @@ ReaderWidget::ReaderWidget(SourceManager* sourceManager, QWidget *parent)
       m_mangaRepo(new MangaRepository()),
       m_historyRepo(new HistoryRepository()),
       m_settingsOverlay(nullptr),
-      m_showingTransition(false)
+      m_showingTransition(false),
+      m_firstPageCover(true),
+      m_autoWideDetect(true)
 {
     reloadSettings();
     // ... (rest of constructor same) ...
@@ -103,8 +105,9 @@ void ReaderWidget::reloadSettings()
     m_scaleType = static_cast<ScaleType>(PreferenceManager::instance().value("reader/scale_type", 1).toInt());
     m_webtoonPadding = PreferenceManager::instance().value("reader/webtoon_padding", 0).toInt();
     m_keepScreenOn = PreferenceManager::instance().value("reader/keep_screen_on", false).toBool();
-    m_keepScreenOn = PreferenceManager::instance().value("reader/keep_screen_on", false).toBool();
     m_fullscreen = PreferenceManager::instance().value("reader/fullscreen", false).toBool();
+    m_firstPageCover = PreferenceManager::instance().value("reader/double_page_cover", true).toBool();
+    m_autoWideDetect = PreferenceManager::instance().value("reader/double_page_auto_wide", true).toBool();
 
     int savedMode = PreferenceManager::instance().value("reader/default_mode", 1).toInt(); // Default to LeftToRight (1)
     if (m_readingMode != static_cast<ReadingMode>(savedMode)) {
@@ -317,36 +320,20 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter, bool startAtEnd)
     m_loadedPages.resize(pageUrls.size());
 
     if (startAtEnd && !m_loadedPages.isEmpty()) {
-        m_currentPageIndex = m_loadedPages.size() - 1;
-        // Adjust for double spread if needed?
-        // If Double Page, index should be even (for Left) or odd?
-        // In "Double Page (LTR)", pairs are (0,1), (2,3).
-        // If size is 10 (indexes 0..9). Last is 9. Pair is (8,9).
-        // If we set index to 9.
-        // updateView() checks `m_currentPageIndex`.
-        // If DoubleSpread LTR: first=9, second=10 (invalid).
-        // It displays 9 on Left.
-        // Wait, pair logic:
-        // LTR: [Page N] [Page N+1]
-        // If N=9. [9] [10].
-        // If we want the last pair, we should ensure we look at the spread containing the last page.
-        // Usually readers snap to the start of the pair.
-        // If total 10 pages interactions 0-9.
-        // Pairs: 0-1, 2-3, 4-5, 6-7, 8-9.
-        // Start indices: 0, 2, 4, 6, 8.
-        // If we go to last page 9.
-        // If we set m_currentPageIndex = 9.
-        // updateView: first=9. second=10.
-        // LTR: Left=9. Right=Null. -> Shows Page 9 on Left.
-        // This is fine. But user might prefer the full spread if 8 exists.
-        // But strict "last page" is 9.
-        // Standard behavior: Go to last page.
-        // If we want "Last Spread", we might decrement by 1 if odd?
-        // For now, simple Last Index is robust enough.
-
-        // Also update Paged View immediately if needed, but displayPage will call updateView when images load?
-        // No, displayPage calls updateView only if index matches.
-        // We need to call updateView to set initial state (even empty).
+        int target = m_loadedPages.size() - 1;
+        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+            int spreadAnchor = 0;
+            while (spreadAnchor < target) {
+                SpreadInfo sInfo = getSpreadInfo(spreadAnchor);
+                if (spreadAnchor + sInfo.stepForward > target) {
+                    break;
+                }
+                spreadAnchor += sInfo.stepForward;
+            }
+            m_currentPageIndex = spreadAnchor;
+        } else {
+            m_currentPageIndex = target;
+        }
         updateView();
     }
 }
@@ -382,7 +369,20 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
     m_loadedPages.resize(pageUrls.size());
 
     if (startAtEnd && !m_loadedPages.isEmpty()) {
-        m_currentPageIndex = m_loadedPages.size() - 1;
+        int target = m_loadedPages.size() - 1;
+        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+            int spreadAnchor = 0;
+            while (spreadAnchor < target) {
+                SpreadInfo sInfo = getSpreadInfo(spreadAnchor);
+                if (spreadAnchor + sInfo.stepForward > target) {
+                    break;
+                }
+                spreadAnchor += sInfo.stepForward;
+            }
+            m_currentPageIndex = spreadAnchor;
+        } else {
+            m_currentPageIndex = target;
+        }
         updateView();
     }
 
@@ -580,6 +580,88 @@ void ReaderWidget::mousePressEvent(QMouseEvent *event)
     }
 }
 
+ReaderWidget::SpreadInfo ReaderWidget::getSpreadInfo(int index) const
+{
+    SpreadInfo info;
+    if (index < 0 || index >= m_loadedPages.size()) return info;
+
+    info.firstIndex = index;
+    info.secondIndex = -1;
+    info.stepForward = 1;
+    info.isSingle = true;
+
+    if (m_readingMode != DoublePageSpread && m_readingMode != DoublePageSpreadLeftToRight) {
+        return info;
+    }
+
+    // Cover page offset: Page 0 is kept single if enabled
+    if (index == 0 && m_firstPageCover) {
+        info.isSingle = true;
+        info.stepForward = 1;
+        return info;
+    }
+
+    const QImage& currentImg = m_loadedPages[index];
+    // If current page is wide landscape, display alone
+    if (m_autoWideDetect && !currentImg.isNull() && currentImg.width() > currentImg.height()) {
+        info.isSingle = true;
+        info.stepForward = 1;
+        return info;
+    }
+
+    // Try to pair with the next page
+    int nextIndex = index + 1;
+    if (nextIndex < m_loadedPages.size()) {
+        const QImage& nextImg = m_loadedPages[nextIndex];
+        // Don't pair if partner is a wide landscape image
+        if (m_autoWideDetect && !nextImg.isNull() && nextImg.width() > nextImg.height()) {
+            info.isSingle = true;
+            info.stepForward = 1;
+            return info;
+        }
+
+        info.secondIndex = nextIndex;
+        info.stepForward = 2;
+        info.isSingle = false;
+    }
+
+    return info;
+}
+
+int ReaderWidget::getPreviousSpreadIndex(int currentIndex) const
+{
+    if (currentIndex <= 0) return 0;
+
+    // Check if index - 2 was a 2-page spread that stepped forward to currentIndex
+    if (currentIndex - 2 >= 0) {
+        SpreadInfo pInfo = getSpreadInfo(currentIndex - 2);
+        if (currentIndex - 2 + pInfo.stepForward == currentIndex) {
+            return currentIndex - 2;
+        }
+    }
+
+    // Fallback: previous spread is 1 page behind
+    if (currentIndex - 1 >= 0) {
+        return currentIndex - 1;
+    }
+
+    return 0;
+}
+
+void ReaderWidget::onFirstPageCoverChanged(bool enabled)
+{
+    m_firstPageCover = enabled;
+    PreferenceManager::instance().setValue("reader/double_page_cover", enabled);
+    updateView();
+}
+
+void ReaderWidget::onAutoWideDetectChanged(bool enabled)
+{
+    m_autoWideDetect = enabled;
+    PreferenceManager::instance().setValue("reader/double_page_auto_wide", enabled);
+    updateView();
+}
+
 void ReaderWidget::nextPage()
 {
     if (m_readingMode == Webtoon) {
@@ -592,29 +674,13 @@ void ReaderWidget::nextPage()
             vBar->setValue(vBar->value() + m_scrollArea->viewport()->height() / 2);
         }
     } else {
-        int increment = (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) ? 2 : 1;
-        bool isRTL = (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread);
-
-        // Logic for "Next" action (advancing reading progress)
-        // For RTL, "Next" key moves to LOWER index usually?
-        // No, standard mapping: Right Key = Previous Page (in RTL context usually goes to 'next' visual page which is previous index, wait).
-        // Let's stick to: nextPage() advances the *index* (1 -> 2).
-        // If RTL, Key_Left calls nextPage(). Key_Right calls previousPage().
-
-        bool atEnd = false;
-        if (m_currentPageIndex + increment >= m_loadedPages.size()) {
-             // If we are at the last page (or spread containing last page)
-             // Check if we are ALREADY at the very end state (viewing it)
-             // Actually, usually users want one more press to trigger "Next Chapter".
-
-             // Simplest: Check if we are attempting to go past the last valid index.
-             // If m_currentPageIndex is already at (size-1), and we try to go next.
-
-             // Let's refine simple index logic:
-             if (m_currentPageIndex + 1 >= m_loadedPages.size()) {
-                 atEnd = true;
-             }
+        int increment = 1;
+        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+            SpreadInfo info = getSpreadInfo(m_currentPageIndex);
+            increment = info.stepForward;
         }
+
+        bool atEnd = (m_currentPageIndex + increment >= m_loadedPages.size());
 
         if (atEnd) {
             if (m_showingTransition) {
@@ -650,21 +716,9 @@ void ReaderWidget::nextPage()
 
         m_showingTransition = false; // Reset if we moved successfully
 
-
-        // Standard Progression
-        if (m_currentPageIndex + increment < m_loadedPages.size()) {
-            m_currentPageIndex += increment;
-            updateView();
-        } else if (m_currentPageIndex + 1 < m_loadedPages.size()) {
-            // Handle odd last page in double spread
-            m_currentPageIndex++;
-            updateView();
-        } else {
-            // Fallback for exactly at limit
-            if (hasNextChapter()) {
-                emit requestNextChapter(m_currentChapterId);
-            }
-        }
+        m_currentPageIndex += increment;
+        updateView();
+        saveReadingProgress();
     }
 }
 
@@ -714,17 +768,14 @@ void ReaderWidget::previousPage()
 
         m_showingTransition = false;
 
-
-
-        int decrement = (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) ? 2 : 1;
-
-        if (m_currentPageIndex - decrement >= 0) {
-            m_currentPageIndex -= decrement;
-            updateView();
-        } else if (m_currentPageIndex > 0) {
-            m_currentPageIndex = 0;
-            updateView();
+        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+            m_currentPageIndex = getPreviousSpreadIndex(m_currentPageIndex);
+        } else {
+            m_currentPageIndex = qMax(0, m_currentPageIndex - 1);
         }
+
+        updateView();
+        saveReadingProgress();
     }
 }
 
@@ -732,120 +783,70 @@ void ReaderWidget::updateView()
 {
     if (m_readingMode == Webtoon) return;
 
+    QPixmap pixmap;
+
     if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
-        // Double Page Spread
-        QImage rightImg, leftImg;
-        // In RTL Double: [Page N+1] [Page N]  (Page N is on Right)
-        // In LTR Double: [Page N] [Page N+1]  (Page N is on Left)
+        SpreadInfo info = getSpreadInfo(m_currentPageIndex);
+        if (info.firstIndex < 0 || info.firstIndex >= m_loadedPages.size()) return;
 
         bool isRTL = (m_readingMode == DoublePageSpread);
+        QImage mainImg = m_loadedPages[info.firstIndex];
+        if (mainImg.isNull()) return;
 
-        int firstIndex = m_currentPageIndex;
-        int secondIndex = m_currentPageIndex + 1;
-
-        QImage* firstPosImg = nullptr; // Left-side image in viewer
-        QImage* secondPosImg = nullptr; // Right-side image in viewer
-
-        if (isRTL) {
-             // RTL: Right side is `firstIndex` (N), Left side is `secondIndex` (N+1)
-             if (firstIndex < m_loadedPages.size()) rightImg = m_loadedPages[firstIndex];
-             if (secondIndex < m_loadedPages.size()) leftImg = m_loadedPages[secondIndex];
+        if (info.isSingle || info.secondIndex < 0 || info.secondIndex >= m_loadedPages.size() || m_loadedPages[info.secondIndex].isNull()) {
+            pixmap = QPixmap::fromImage(mainImg);
         } else {
-             // LTR: Left side is `firstIndex` (N), Right side is `secondIndex` (N+1)
-             if (firstIndex < m_loadedPages.size()) leftImg = m_loadedPages[firstIndex];
-             if (secondIndex < m_loadedPages.size()) rightImg = m_loadedPages[secondIndex];
+            QImage partnerImg = m_loadedPages[info.secondIndex];
+            QImage leftImg = isRTL ? partnerImg : mainImg;
+            QImage rightImg = isRTL ? mainImg : partnerImg;
+
+            int totalWidth = leftImg.width() + rightImg.width();
+            int maxHeight = qMax(leftImg.height(), rightImg.height());
+
+            QImage combined(totalWidth, maxHeight, QImage::Format_ARGB32);
+            combined.fill(Qt::black);
+            QPainter painter(&combined);
+
+            int yLeft = (maxHeight - leftImg.height()) / 2;
+            int yRight = (maxHeight - rightImg.height()) / 2;
+
+            painter.drawImage(0, yLeft, leftImg);
+            painter.drawImage(leftImg.width(), yRight, rightImg);
+            painter.end();
+
+            pixmap = QPixmap::fromImage(combined);
         }
-
-        if (rightImg.isNull() && leftImg.isNull()) return;
-
-        int totalWidth = 0;
-        int maxHeight = 0;
-
-        if (!rightImg.isNull()) {
-            totalWidth += rightImg.width();
-            maxHeight = qMax(maxHeight, rightImg.height());
-        }
-        if (!leftImg.isNull()) {
-            totalWidth += leftImg.width();
-            maxHeight = qMax(maxHeight, leftImg.height());
-        }
-
-        // Create combined image
-        QImage combined(totalWidth, maxHeight, QImage::Format_ARGB32);
-        combined.fill(Qt::black);
-        QPainter painter(&combined);
-
-        int currentX = 0;
-
-        // Draw Left Image first (on the left side)
-        if (!leftImg.isNull()) {
-             // Center vertically if needed, or align top
-             painter.drawImage(0, 0, leftImg);
-             currentX += leftImg.width();
-        }
-
-        // Draw Right Image (on the right side)
-        if (!rightImg.isNull()) {
-            painter.drawImage(currentX, 0, rightImg);
-        }
-
-        painter.end();
-
-        QPixmap pixmap = QPixmap::fromImage(combined);
-        int w = this->width();
-        int h = this->height();
-
-        Qt::AspectRatioMode aspectRatioMode = Qt::KeepAspectRatio;
-        if (m_scaleType == Stretch) aspectRatioMode = Qt::IgnoreAspectRatio;
-
-        if (m_scaleType == OriginalSize) {
-             m_pagedLabel->setPixmap(pixmap);
-        } else if (m_scaleType == FitWidth) {
-             m_pagedLabel->setPixmap(pixmap.scaledToWidth(w, Qt::SmoothTransformation));
-        } else if (m_scaleType == FitHeight) {
-             m_pagedLabel->setPixmap(pixmap.scaledToHeight(h, Qt::SmoothTransformation));
-        } else if (m_scaleType == SmartFit) {
-             // SmartFit: Fit screen but don't upscale beyond original if it fits
-             if (pixmap.width() <= w && pixmap.height() <= h) {
-                 m_pagedLabel->setPixmap(pixmap);
-             } else {
-                 m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
-             }
-        } else {
-             // FitScreen
-             m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
-        }
-
     } else {
-        // Single Page Mode
         if (m_currentPageIndex >= 0 && m_currentPageIndex < m_loadedPages.size()) {
             QImage img = m_loadedPages[m_currentPageIndex];
             if (!img.isNull()) {
-                QPixmap pixmap = QPixmap::fromImage(img);
-                int w = this->width();
-                int h = this->height();
-
-                Qt::AspectRatioMode aspectRatioMode = Qt::KeepAspectRatio;
-                if (m_scaleType == Stretch) aspectRatioMode = Qt::IgnoreAspectRatio;
-
-                if (m_scaleType == OriginalSize) {
-                     m_pagedLabel->setPixmap(pixmap);
-                } else if (m_scaleType == FitWidth) {
-                     m_pagedLabel->setPixmap(pixmap.scaledToWidth(w, Qt::SmoothTransformation));
-                } else if (m_scaleType == FitHeight) {
-                     m_pagedLabel->setPixmap(pixmap.scaledToHeight(h, Qt::SmoothTransformation));
-                } else if (m_scaleType == SmartFit) {
-                     if (pixmap.width() <= w && pixmap.height() <= h) {
-                         m_pagedLabel->setPixmap(pixmap);
-                     } else {
-                         m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
-                     }
-                } else {
-                     // FitScreen
-                     m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
-                }
+                pixmap = QPixmap::fromImage(img);
             }
         }
+    }
+
+    if (pixmap.isNull()) return;
+
+    int w = this->width();
+    int h = this->height();
+
+    Qt::AspectRatioMode aspectRatioMode = Qt::KeepAspectRatio;
+    if (m_scaleType == Stretch) aspectRatioMode = Qt::IgnoreAspectRatio;
+
+    if (m_scaleType == OriginalSize) {
+        m_pagedLabel->setPixmap(pixmap);
+    } else if (m_scaleType == FitWidth) {
+        m_pagedLabel->setPixmap(pixmap.scaledToWidth(w, Qt::SmoothTransformation));
+    } else if (m_scaleType == FitHeight) {
+        m_pagedLabel->setPixmap(pixmap.scaledToHeight(h, Qt::SmoothTransformation));
+    } else if (m_scaleType == SmartFit) {
+        if (pixmap.width() <= w && pixmap.height() <= h) {
+            m_pagedLabel->setPixmap(pixmap);
+        } else {
+            m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
+        }
+    } else {
+        m_pagedLabel->setPixmap(pixmap.scaled(w, h, aspectRatioMode, Qt::SmoothTransformation));
     }
 }
 
@@ -879,11 +880,20 @@ void ReaderWidget::showSettingsOverlay()
         m_settingsOverlay = new ReaderSettingsOverlay(this);
         m_settingsOverlay->setCurrentReadingMode(static_cast<int>(m_readingMode));
         m_settingsOverlay->setCurrentScaleType(static_cast<int>(m_scaleType));
+        m_settingsOverlay->setFirstPageCover(m_firstPageCover);
+        m_settingsOverlay->setAutoWideDetect(m_autoWideDetect);
 
         connect(m_settingsOverlay, &ReaderSettingsOverlay::readingModeChanged, this, &ReaderWidget::onReadingModeChanged);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::scaleTypeChanged, this, &ReaderWidget::onScaleTypeChanged);
+        connect(m_settingsOverlay, &ReaderSettingsOverlay::firstPageCoverChanged, this, &ReaderWidget::onFirstPageCoverChanged);
+        connect(m_settingsOverlay, &ReaderSettingsOverlay::autoWideDetectChanged, this, &ReaderWidget::onAutoWideDetectChanged);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::closeRequested, this, &ReaderWidget::hideSettingsOverlay);
         connect(m_settingsOverlay, &ReaderSettingsOverlay::backToLibraryRequested, this, &ReaderWidget::navigateBack);
+    } else {
+        m_settingsOverlay->setCurrentReadingMode(static_cast<int>(m_readingMode));
+        m_settingsOverlay->setCurrentScaleType(static_cast<int>(m_scaleType));
+        m_settingsOverlay->setFirstPageCover(m_firstPageCover);
+        m_settingsOverlay->setAutoWideDetect(m_autoWideDetect);
     }
 
     // Position in center

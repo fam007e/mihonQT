@@ -383,6 +383,25 @@ void SettingsView::createReaderPage() {
 
   modeLayout->addWidget(modeLabel);
   modeLayout->addWidget(m_readingModeComboBox);
+
+  m_firstPageCoverCheckBox = new QCheckBox("Double Page: First page is cover", this);
+  m_firstPageCoverCheckBox->setChecked(PreferenceManager::instance()
+                                         .value("reader/double_page_cover", true)
+                                         .toBool());
+  connect(m_firstPageCoverCheckBox, &QCheckBox::toggled, [](bool checked) {
+    PreferenceManager::instance().setValue("reader/double_page_cover", checked);
+  });
+  modeLayout->addWidget(m_firstPageCoverCheckBox);
+
+  m_autoWideDetectCheckBox = new QCheckBox("Double Page: Don't pair wide pages", this);
+  m_autoWideDetectCheckBox->setChecked(PreferenceManager::instance()
+                                         .value("reader/double_page_auto_wide", true)
+                                         .toBool());
+  connect(m_autoWideDetectCheckBox, &QCheckBox::toggled, [](bool checked) {
+    PreferenceManager::instance().setValue("reader/double_page_auto_wide", checked);
+  });
+  modeLayout->addWidget(m_autoWideDetectCheckBox);
+
   layout->addWidget(modeGroup);
 
   // Display Group
