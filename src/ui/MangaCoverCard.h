@@ -5,6 +5,8 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QPixmap>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include "../model/Manga.h"
 
 class MangaCoverCard : public QFrame
@@ -29,6 +31,7 @@ protected:
 private:
     void setupUi();
     void updateBadge();
+    void fetchCoverFromUrl(const QString& url);
 
     Manga m_manga;
     int m_unreadCount;
@@ -36,6 +39,8 @@ private:
     QLabel *m_coverLabel;
     QLabel *m_titleLabel;
     QLabel *m_badgeLabel;
+
+    static QNetworkAccessManager* coverNetworkManager();
 };
 
 #endif // MANGACOVERCARD_H

@@ -11,9 +11,10 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 COMPONENTS Core Gui Widgets Sql Concurrent Quick Qml Core5Compat WebEngineWidgets WebEngineCore REQUIRED) # Add Core5Compat and WebEngine
 
-# --- Gumbo HTML5 Parser ---
+# --- Gumbo HTML5 Parser & WebP ---
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GUMBO REQUIRED gumbo)
+pkg_check_modules(WEBP REQUIRED libwebp)
 
 # --- QuaZip ---
 set(QUAZIP_QT_MAJOR_VERSION 6 CACHE STRING "Qt version to use (6 or 5)" FORCE)
@@ -36,6 +37,7 @@ add_executable(MihonQT
     src/source/SourceManager.cpp
     src/source/JavascriptSource.cpp # Add JavascriptSource.cpp
     src/source/HtmlParser.cpp # Add HtmlParser.cpp
+    src/util/ImageUtil.cpp # WebP and Image utility
     src/network/NetworkAccessManager.cpp # Add NetworkAccessManager.cpp
     src/ui/reader/ReaderWidget.cpp
     src/ui/reader/ReaderSettingsOverlay.cpp
@@ -71,7 +73,7 @@ add_executable(MihonQT
 )
 
 # --- Link Libraries ---
-target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip ${GUMBO_LIBRARIES}) # Link QuaZip, WebEngine and Gumbo
+target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip ${GUMBO_LIBRARIES} ${WEBP_LIBRARIES}) # Link QuaZip, WebEngine, Gumbo and WebP
 
 # --- Deployment ---
 if(WIN32)
@@ -82,6 +84,7 @@ endif()
 # --- Include Directories ---
 target_include_directories(MihonQT PRIVATE
     ${GUMBO_INCLUDE_DIRS}
+    ${WEBP_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/database
     ${CMAKE_CURRENT_SOURCE_DIR}/src/model
@@ -89,6 +92,7 @@ target_include_directories(MihonQT PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/source
     ${CMAKE_CURRENT_SOURCE_DIR}/src/source/model
     ${CMAKE_CURRENT_SOURCE_DIR}/src/network # Add src/network include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/util # Add src/util include
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui
     ${CMAKE_CURRENT_SOURCE_DIR}/src/ui/reader
     ${CMAKE_CURRENT_SOURCE_DIR}/src/download

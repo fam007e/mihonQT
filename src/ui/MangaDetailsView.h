@@ -27,6 +27,7 @@ private:
     void setupUi();
     void refreshChapters();
     void updateLibraryButton();
+    void updateSortButton();
 
     Manga m_manga;
     QList<Chapter> m_chapters;
@@ -36,6 +37,7 @@ private:
     QLabel *m_descriptionLabel;
     QPushButton *m_libraryButton;
     QPushButton *m_editCategoriesButton; // New button
+    QPushButton *m_sortButton; // Chapter sort button
     QPushButton *m_openWebViewButton; // WebView button
     QListWidget *m_chapterListWidget;
 };

@@ -3,6 +3,7 @@
 #include "database/MangaRepository.h"
 #include "database/ChapterRepository.h"
 #include "model/Manga.h"
+#include "model/ChapterSort.h"
 #include <QStandardPaths>
 #include <QDir>
 
@@ -68,6 +69,12 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     m_sourceManager->loadExtensions(extensionsPath, m_jsEngine, m_networkManager);
+
+    // Also load from current working directory or application directory if different
+    QString localExt = QDir::current().filePath("extensions");
+    if (QDir(localExt).exists() && QDir(localExt).canonicalPath() != dir.canonicalPath()) {
+        m_sourceManager->loadExtensions(localExt, m_jsEngine, m_networkManager);
+    }
 
 
 
@@ -327,6 +334,7 @@ void MainWindow::onMangaSelected(const Manga& manga)
             // Now fetch and insert chapters for this new manga
             QList<SChapter> sChapters = source->getChapterList(dbManga);
             int chapterOrder = 0;
+            QSqlDatabase::database().transaction();
             for (const SChapter& sChap : sChapters) {
                 Chapter chapter(
                     -1, // id (will be assigned by DB)
@@ -343,6 +351,7 @@ void MainWindow::onMangaSelected(const Manga& manga)
                 );
                 chapterRepo.insertChapter(chapter);
             }
+            QSqlDatabase::database().commit();
             qDebug() << "Inserted" << sChapters.size() << "chapters for manga ID:" << mangaIdToOpen;
         } else {
             qWarning() << "Failed to insert new manga into database.";
@@ -356,6 +365,7 @@ void MainWindow::onMangaSelected(const Manga& manga)
         QList<Chapter> existingChapters = chapterRepo.getChaptersByMangaId(mangaIdToOpen);
 
         // Simple sync: add only those that don't exist by URL
+        QSqlDatabase::database().transaction();
         for (const SChapter& sChap : sChapters) {
             bool exists = false;
             for (const Chapter& existing : existingChapters) {
@@ -376,6 +386,7 @@ void MainWindow::onMangaSelected(const Manga& manga)
                 chapterRepo.insertChapter(chapter);
             }
         }
+        QSqlDatabase::database().commit();
     }
 
     if (mangaIdToOpen != -1) {
@@ -580,21 +591,18 @@ void MainWindow::onRequestNextChapter(long currentChapterId)
 
     if (currentChapter.id() == -1) return;
 
+    Manga manga = DatabaseManager::instance().mangaRepository().getMangaById(currentChapter.mangaId());
     QList<Chapter> allChapters = chapterRepo.getChaptersByMangaId(currentChapter.mangaId());
 
-    // Find next chapter based on number (Assuming reading 1 -> 2 -> 3)
-    // Find smallest number that is strictly greater than current number
+    // Sort chapters in ascending reading order (matching Android Mihon ReaderViewModel)
+    auto comparator = getChapterComparator(manga, /*sortDescending=*/false);
+    std::sort(allChapters.begin(), allChapters.end(), comparator);
 
     Chapter nextChapter;
-    double minDiff = 999999.0;
-
-    for (const Chapter& chap : allChapters) {
-        if (chap.chapterNumber() > currentChapter.chapterNumber()) {
-            double diff = chap.chapterNumber() - currentChapter.chapterNumber();
-            if (diff < minDiff) {
-                minDiff = diff;
-                nextChapter = chap;
-            }
+    for (int i = 0; i < allChapters.size(); ++i) {
+        if (allChapters[i].id() == currentChapter.id() && i + 1 < allChapters.size()) {
+            nextChapter = allChapters[i + 1];
+            break;
         }
     }
 
@@ -603,8 +611,6 @@ void MainWindow::onRequestNextChapter(long currentChapterId)
         showReader(nextChapter.mangaId(), nextChapter.id());
     } else {
         qDebug() << "No next chapter found.";
-        // Optional: Show toast "No more chapters"
-        // onBackRequested();
     }
 }
 
@@ -615,18 +621,18 @@ void MainWindow::onRequestPreviousChapter(long currentChapterId)
 
     if (currentChapter.id() == -1) return;
 
+    Manga manga = DatabaseManager::instance().mangaRepository().getMangaById(currentChapter.mangaId());
     QList<Chapter> allChapters = chapterRepo.getChaptersByMangaId(currentChapter.mangaId());
 
-    // Find previous chapter: largest number < current number
-    Chapter previousChapter;
-    double maxNumber = -1.0;
+    // Sort chapters in ascending reading order (matching Android Mihon ReaderViewModel)
+    auto comparator = getChapterComparator(manga, /*sortDescending=*/false);
+    std::sort(allChapters.begin(), allChapters.end(), comparator);
 
-    for (const Chapter& chap : allChapters) {
-        if (chap.chapterNumber() < currentChapter.chapterNumber()) {
-            if (chap.chapterNumber() > maxNumber) {
-                maxNumber = chap.chapterNumber();
-                previousChapter = chap;
-            }
+    Chapter previousChapter;
+    for (int i = 0; i < allChapters.size(); ++i) {
+        if (allChapters[i].id() == currentChapter.id() && i > 0) {
+            previousChapter = allChapters[i - 1];
+            break;
         }
     }
 
@@ -635,6 +641,5 @@ void MainWindow::onRequestPreviousChapter(long currentChapterId)
         showReader(previousChapter.mangaId(), previousChapter.id(), true); // startAtEnd = true
     } else {
         qDebug() << "No previous chapter found.";
-        // Optional: Show toast "Already at first chapter"
     }
 }

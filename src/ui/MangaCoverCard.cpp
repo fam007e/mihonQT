@@ -4,6 +4,15 @@
 #include <QGraphicsDropShadowEffect>
 #include <QDir>
 #include <QFileInfo>
+#include <QApplication>
+#include "../util/ImageUtil.h"
+
+QNetworkAccessManager* MangaCoverCard::coverNetworkManager()
+{
+    // Shared QNAM for all cover downloads, lives on the main thread.
+    static QNetworkAccessManager* s_nam = new QNetworkAccessManager(qApp);
+    return s_nam;
+}
 
 MangaCoverCard::MangaCoverCard(const Manga& manga, int unreadCount, QWidget *parent)
     : QFrame(parent)
@@ -24,11 +33,45 @@ MangaCoverCard::MangaCoverCard(const Manga& manga, int unreadCount, QWidget *par
     }
 
     if (!thumb.isEmpty()) {
-        QPixmap pixmap(thumb);
-        if (!pixmap.isNull()) {
-            setCoverImage(pixmap);
+        if (thumb.startsWith("http://") || thumb.startsWith("https://")) {
+            // Async download for web URLs
+            fetchCoverFromUrl(thumb);
+        } else {
+            // Local file path
+            QPixmap pixmap(thumb);
+            if (!pixmap.isNull()) {
+                setCoverImage(pixmap);
+            }
         }
     }
+}
+
+void MangaCoverCard::fetchCoverFromUrl(const QString& url)
+{
+    QNetworkRequest request{QUrl(url)};
+    request.setHeader(QNetworkRequest::UserAgentHeader,
+        QStringLiteral("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"));
+    // Allow redirects (some CDNs redirect)
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
+
+    QNetworkReply* reply = coverNetworkManager()->get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply->error() != QNetworkReply::NoError) {
+            qWarning() << "Cover download failed for" << m_manga.title() << ":" << reply->errorString();
+            return;
+        }
+        QByteArray data = reply->readAll();
+        QPixmap pixmap = ImageUtil::loadPixmapFromData(data);
+        if (!pixmap.isNull()) {
+            setCoverImage(pixmap);
+            // qDebug() << "Cover loaded for" << m_manga.title();
+        } else {
+            qWarning() << "Failed to decode cover image for" << m_manga.title();
+        }
+    });
 }
 
 void MangaCoverCard::setupUi()

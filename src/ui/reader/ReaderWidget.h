@@ -55,6 +55,7 @@ public:
 protected:
     void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
     void showSettingsOverlay();
     void hideSettingsOverlay();
@@ -77,6 +78,7 @@ private:
     void setupWebtoonView();
     void setupPagedView();
     void updateView();
+    void updateWebtoonView();
     void nextPage();
     void previousPage();
     void saveReadingProgress();
@@ -102,6 +104,7 @@ private:
     QScrollArea *m_scrollArea;
     QWidget *m_contentWidget;
     QVBoxLayout *m_contentLayout;
+    QVector<QLabel*> m_webtoonLabels;
 
     // Paged View
     QScrollArea *m_pagedScrollArea;
@@ -110,7 +113,6 @@ private:
     QVector<QImage> m_loadedPages;
 
     ReadingMode m_readingMode;
-    ReadingMode m_lastSinglePageMode; // To track preferred direction for Double Page switch
     ScaleType m_scaleType;
     int m_webtoonPadding;
     bool m_keepScreenOn;

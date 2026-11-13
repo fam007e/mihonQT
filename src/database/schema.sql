@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS mangas(
     favorite_modified_at INTEGER,
     version INTEGER NOT NULL,
     is_syncing INTEGER NOT NULL,
-    notes TEXT NOT NULL
+    notes TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS chapters(

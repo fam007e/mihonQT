@@ -2,17 +2,18 @@
 #define JAVASCRIPTSOURCE_H
 
 #include "SourceBase.h"
-#include <QJSEngine> // Include QJSEngine
-#include <QJSValue> // For QJSValue
-#include "network/NetworkAccessManager.h" // Include our NetworkAccessManager
+#include <QJSEngine>
+#include <QJSValue>
+#include <QString>
+#include <QList>
 
-class QNetworkAccessManager; // Forward declaration (no longer needed here, but keeping for safety if other files still forward declare it)
+class NetworkAccessManager;
 
 class JavascriptSource : public SourceBase
 {
     Q_OBJECT
 public:
-    explicit JavascriptSource(const QString& scriptPath, QJSEngine* engine, NetworkAccessManager* networkManager, QObject *parent = nullptr);
+    explicit JavascriptSource(const QString& scriptPath, QJSEngine* engine = nullptr, NetworkAccessManager* networkManager = nullptr, QObject *parent = nullptr);
     ~JavascriptSource() override;
 
     // SourceBase overrides
@@ -31,11 +32,16 @@ public:
 
 private:
     QString m_scriptPath;
-    QJSEngine* m_engine;
-    QJSValue m_scriptObject; // Holds the JavaScript object representing the source
+    QString m_scriptContent;
+    QString m_name;
+    long m_id = 0;
+    QString m_lang;
+    QString m_baseUrl;
+    bool m_supportsLatest = false;
+    QString m_pkgName;
 
-    void initScript();
-    QJSValue callJsFunction(const QString& functionName, const QJSValueList& args = QJSValueList());
+    QJSValue callJsMethod(QJSEngine& engine, const QString& functionName, const QJSValueList& args = QJSValueList());
 };
 
 #endif // JAVASCRIPTSOURCE_H
+

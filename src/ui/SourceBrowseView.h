@@ -5,7 +5,10 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
+#include <QProgressBar>
 #include <QStackedWidget>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrent>
 #include "MangaListView.h"
 #include "source/SourceBase.h"
 
@@ -26,6 +29,7 @@ private slots:
     void onSearchTriggered();
     void onPopularClicked();
     void onLatestClicked();
+    void onMangaFetchFinished();
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -39,7 +43,10 @@ private:
     QLineEdit *m_searchEdit;
     QPushButton *m_popularBtn;
     QPushButton *m_latestBtn;
+    QProgressBar *m_progressBar;
+    QLabel *m_statusLabel;
     MangaListView *m_mangaListView;
+    QFutureWatcher<QList<Manga>> m_watcher;
 };
 
 #endif // SOURCEBROWSEVIEW_H

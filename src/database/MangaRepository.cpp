@@ -44,7 +44,7 @@ bool MangaRepository::insertManga(const Manga& manga)
     query.bindValue(":last_modified_at", static_cast<qlonglong>(manga.lastModifiedAt()));
     query.bindValue(":favorite_modified_at", static_cast<qlonglong>(manga.favoriteModifiedAt()));
     query.bindValue(":version", static_cast<qlonglong>(manga.version()));
-    query.bindValue(":notes", manga.notes());
+    query.bindValue(":notes", manga.notes().isEmpty() ? QStringLiteral("") : manga.notes());
     query.bindValue(":is_syncing", manga.isSyncing());
 
     if (!query.exec()) {
@@ -90,7 +90,7 @@ bool MangaRepository::updateManga(const Manga& manga)
     query.bindValue(":last_modified_at", static_cast<qlonglong>(manga.lastModifiedAt()));
     query.bindValue(":favorite_modified_at", static_cast<qlonglong>(manga.favoriteModifiedAt()));
     query.bindValue(":version", static_cast<qlonglong>(manga.version()));
-    query.bindValue(":notes", manga.notes());
+    query.bindValue(":notes", manga.notes().isEmpty() ? QStringLiteral("") : manga.notes());
     query.bindValue(":is_syncing", manga.isSyncing());
     query.bindValue(":id", static_cast<qlonglong>(manga.id()));
 
