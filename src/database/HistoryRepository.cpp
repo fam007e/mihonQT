@@ -52,14 +52,19 @@ QList<HistoryEntry> HistoryRepository::getRecentHistory(int limit)
 {
     QList<HistoryEntry> entries;
     QSqlQuery query;
+    // One row per manga — the most recently read chapter (Mihon behaviour:
+    // several chapters of the same title collapse into a single history
+    // entry pointing at the latest one). SQLite's bare-column-with-MAX
+    // semantics make the non-aggregated columns come from that row.
     query.prepare(
         "SELECT h._id, h.chapter_id, h.last_read, h.time_read, "
         "       c.manga_id, c.name AS chapter_name, "
-        "       m.title AS manga_title, m.thumbnail_url "
+        "       m.title AS manga_title, m.thumbnail_url, MAX(h.last_read) "
         "FROM history h "
         "JOIN chapters c ON h.chapter_id = c._id "
         "JOIN mangas m ON c.manga_id = m._id "
-        "ORDER BY h.last_read DESC "
+        "GROUP BY c.manga_id "
+        "ORDER BY MAX(h.last_read) DESC "
         "LIMIT :limit"
     );
     query.bindValue(":limit", limit);

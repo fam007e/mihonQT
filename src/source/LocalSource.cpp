@@ -162,13 +162,15 @@ QString LocalSource::extractCoverFromArchive(const QDir& mangaDir) const
     return found ? cachePath : "";
 }
 
-QList<Manga> LocalSource::getPopularManga()
+QList<Manga> LocalSource::getPopularManga(int page)
 {
-    return getSearchManga(""); // For MVP, popular is just all manga
+    if (page > 1) return {}; // the local library is a single page
+    return getSearchManga("", 1); // For MVP, popular is just all manga
 }
 
-QList<Manga> LocalSource::getLatestUpdates()
+QList<Manga> LocalSource::getLatestUpdates(int page)
 {
+    if (page > 1) return {}; // the local library is a single page
     QList<Manga> mangas;
     QList<QDir> mangaDirs = getFilesInBaseDirectory();
 
@@ -183,8 +185,9 @@ QList<Manga> LocalSource::getLatestUpdates()
     return mangas;
 }
 
-QList<Manga> LocalSource::getSearchManga(const QString& query)
+QList<Manga> LocalSource::getSearchManga(const QString& query, int page)
 {
+    if (page > 1) return {}; // the local library is a single page
     QList<Manga> mangas;
     QList<QDir> mangaDirs = getFilesInBaseDirectory();
 

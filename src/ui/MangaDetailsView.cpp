@@ -6,6 +6,7 @@
 #include "database/ChapterRepository.h"
 #include "database/CategoryRepository.h"
 #include "model/ChapterSort.h"
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -471,8 +472,11 @@ void MangaDetailsView::updateHeader()
         if (!list.isEmpty()) thumb = list.first().absoluteFilePath();
     }
     if (!thumb.isEmpty()) {
+        const QUrl mangaUrl(m_manga.url());
+        const QString referer = (mangaUrl.isValid() && (mangaUrl.scheme() == "http" || mangaUrl.scheme() == "https"))
+            ? mangaUrl.scheme() + "://" + mangaUrl.host() + "/" : QString();
         QPixmap pm = thumb.startsWith("http")
-            ? CoverCache::instance().load(thumb)
+            ? CoverCache::instance().load(thumb, referer)
             : QPixmap(thumb);
         if (!pm.isNull())
             m_coverLabel->setPixmap(pm.scaled(120, 180, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));

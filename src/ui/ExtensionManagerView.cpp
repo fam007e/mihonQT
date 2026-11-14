@@ -2,6 +2,7 @@
 #include "../source/ExtensionRepoManager.h"
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -21,6 +22,11 @@ ExtensionManagerView::ExtensionManagerView(QWidget *parent)
 {
     setupUi();
     refreshAvailableExtensions();
+
+    // Re-render the list when anything installs/updates so the entry flips
+    // to "installed" (and clears a stale "update available") immediately.
+    connect(&ExtensionManager::instance(), &ExtensionManager::extensionInstalled,
+            this, &ExtensionManagerView::refreshAvailableExtensions);
 }
 
 void ExtensionManagerView::setupUi()
@@ -59,23 +65,27 @@ void ExtensionManagerView::setupUi()
     connect(m_availableList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
         QString pkgName = item->data(Qt::UserRole).toString();
         QString downloadUrl = item->data(Qt::UserRole + 1).toString();
-        
+        long long indexCode = item->data(Qt::UserRole + 2).toLongLong();
+
         if (QMessageBox::question(this, "Install Extension", "Do you want to install " + item->text() + "?") == QMessageBox::Yes) {
             // Basic download logic
             QNetworkAccessManager *manager = new QNetworkAccessManager(this);
             QNetworkReply *reply = manager->get(QNetworkRequest(QUrl(downloadUrl)));
-            
-            connect(reply, &QNetworkReply::finished, this, [this, reply, pkgName]() {
+
+            connect(reply, &QNetworkReply::finished, this, [this, reply, pkgName, indexCode]() {
                 if (reply->error() == QNetworkReply::NoError) {
                     QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
                     QString extensionsPath = dataDir + "/extensions/" + pkgName + ".js";
                     QDir().mkpath(dataDir + "/extensions");
-                    
+
                     QFile file(extensionsPath);
                     if (file.open(QIODevice::WriteOnly)) { // flawfinder: ignore
                         file.write(reply->readAll());
                         file.close();
-                        QMessageBox::information(this, "Success", "Extension installed. Restart recommended.");
+                        // Record the version and notify listeners so the source
+                        // hot-loads into the browse list without a restart.
+                        ExtensionManager::instance().recordInstalled(pkgName, indexCode);
+                        QMessageBox::information(this, "Success", "Extension installed. It is available immediately in Browse > Sources.");
                     }
                 }
                 reply->deleteLater();
@@ -112,19 +122,61 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     QJsonObject obj = val.toObject();
                     QString name = obj["name"].toString();
                     QString pkg = obj["pkg"].toString();
-                    // Assuming .js is in the same repo structure or construct URL
-                    // Most repos use: baseUrl/scripts/pkg.js
-                    QString downloadUrl = repo.baseUrl + "/scripts/" + pkg + ".js";
+                    QString apk = obj["apk"].toString();
+                    QString version = obj["version"].toString();
+                    long long indexCode = obj["code"].toVariant().toLongLong();
+                    // The index's `apk` field is the filename under the repo's
+                    // apk/ directory (mirrors ExtensionManager::getJsUrl());
+                    // fall back to the old scripts/ layout for repos without it.
+                    QString downloadUrl;
+                    if (!apk.isEmpty()) {
+                        downloadUrl = repo.baseUrl + "/apk/" + apk;
+                    } else {
+                        downloadUrl = repo.baseUrl + "/scripts/" + pkg + ".js";
+                    }
 
                     bool isTrusted = ExtensionManager::instance().isTrusted(pkg);
-                    QString displayName = name + (isTrusted ? " [Trusted]" : "");
-                    
-                    QListWidgetItem *item = new QListWidgetItem(displayName, m_availableList);
+                    long installedCode = ExtensionManager::instance().installedCode(pkg);
+                    QString displayName = name;
+                    if (!version.isEmpty()) {
+                        displayName += " (v" + version + ")";
+                    }
+                    if (installedCode > 0) {
+                        displayName += " · installed";
+                        if (indexCode > installedCode) {
+                            displayName += " — update available";
+                        }
+                    }
+
+                    // Row widget: name + inline trust toggle (double-click
+                    // elsewhere in the row still installs)
+                    QListWidgetItem *item = new QListWidgetItem(m_availableList);
                     item->setData(Qt::UserRole, pkg);
                     item->setData(Qt::UserRole + 1, downloadUrl);
+                    item->setData(Qt::UserRole + 2, static_cast<qlonglong>(indexCode));
+
+                    QWidget *row = new QWidget;
+                    QHBoxLayout *rowLayout = new QHBoxLayout(row);
+                    rowLayout->setContentsMargins(4, 2, 8, 2);
+                    rowLayout->setSpacing(8);
+                    QLabel *nameLabel = new QLabel(displayName, row);
                     if (isTrusted) {
-                        item->setForeground(QColor("#A3BE8C")); // Greenish for trusted
+                        nameLabel->setStyleSheet("color: #A3BE8C;"); // greenish for trusted
                     }
+                    QPushButton *trustBtn = new QPushButton(isTrusted ? "Untrust" : "Trust", row);
+                    trustBtn->setCursor(Qt::PointingHandCursor);
+                    trustBtn->setToolTip("Trusted extensions may fetch from hosts other than their site");
+                    trustBtn->setFixedWidth(92); // keep the row stable across Trust/Untrust text
+                    const QString rowPkg = pkg;
+                    connect(trustBtn, &QPushButton::clicked, this, [this, rowPkg]() {
+                        bool trusted = ExtensionManager::instance().isTrusted(rowPkg);
+                        ExtensionManager::instance().setTrusted(rowPkg, !trusted);
+                        refreshAvailableExtensions();
+                    });
+                    rowLayout->addWidget(nameLabel, 1);
+                    rowLayout->addWidget(trustBtn);
+                    item->setSizeHint(QSize(0, row->sizeHint().height()));
+                    m_availableList->setItemWidget(item, row);
                 }
             }
             reply->deleteLater();

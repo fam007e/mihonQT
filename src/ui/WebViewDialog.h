@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include <QWebEngineView>
+#include <QWebEnginePage>
 #include <QVBoxLayout>
 #include <QWebEngineProfile>
 #include <QWebEngineCookieStore>
@@ -20,8 +21,16 @@ public:
     QList<QNetworkCookie> getHarvestedCookies() const;
 
 private:
+    // Own page so the dialog can tune certificate handling (see ctor) —
+    // it exists purely to solve bot challenges.
+    QWebEnginePage m_page;
     QWebEngineView *m_webView;
+    QString m_url;
     QList<QNetworkCookie> m_harvestedCookies;
+    bool m_cleared = false; // challenge passed -> dialog auto-closes once
+
+protected:
+    void done(int result) override;
 
 private slots:
     void onCookieAdded(const QNetworkCookie &cookie);

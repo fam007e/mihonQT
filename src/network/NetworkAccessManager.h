@@ -40,11 +40,23 @@ public:
     
     Q_INVOKABLE QJSValue get(const QString& url);
     Q_INVOKABLE QJSValue post(const QString& url, const QByteArray& data);
+    // Set a session cookie for the source's own domain (e.g. Madara sites'
+    // "toonily-mature=1" adult-content toggle, which is checked server-side).
+    Q_INVOKABLE bool setCookie(const QString& name, const QString& value);
 
     void setTrusted(bool trusted) { m_isTrusted = trusted; }
     void setAllowedBaseUrl(const QString& baseUrl) { m_allowedBaseUrl = baseUrl; }
 
     static SharedCookieJar* sharedCookieJar();
+    // The browser UA used for all extension network requests. The WebView
+    // challenge dialog must use the SAME UA: Cloudflare binds cf_clearance
+    // to the User-Agent. The override is set from the WebEngine profile's
+    // native UA (with its QtWebEngine token stripped) so the browser and the
+    // network layer share one internally-consistent identity — spoofing a
+    // Chrome version the embedded Chromium isn't makes Cloudflare loop
+    // "Verifying you are human" forever.
+    static void setUserAgentOverride(const QString& ua);
+    static QString browserUserAgent();
 
 signals:
     void requestFinished(const QJSValue& result);
@@ -53,9 +65,19 @@ private slots:
     void onReplyFinished(QNetworkReply* reply);
 
 private:
+    // Chrome-navigation header emulation (mirrors keiyoushi BrowserHeaders):
+    // many CDNs/WAFs 403 bare non-browser requests before Cloudflare even
+    // issues a challenge. Client hints are derived from browserUserAgent()
+    // so they never contradict the UA.
+    void applyBrowserHeaders(QNetworkRequest& request) const;
+    // 403/503 responses that look like a bot challenge (Cloudflare headers
+    // or challenge markers in the body) open the WebView dialog.
+    bool looksLikeChallenge(QNetworkReply* reply) const;
+    bool solveChallenge(QNetworkReply* reply, const QString& url);
+
+private:
     QNetworkAccessManager m_networkManager;
     QJSEngine* m_engine;
-    QString m_userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     bool m_isTrusted = true;
     QString m_allowedBaseUrl;
 

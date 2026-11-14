@@ -41,6 +41,11 @@ public:
     void installExtension(const RemoteExtension& ext, NetworkAccessManager* networkManager, const QString& extensionsDir);
     bool isInstalled(const QString& pkgName, const QString& extensionsDir) const;
 
+    // Update bookkeeping: remember the versionCode of each installed
+    // extension so the manager can flag "update available" entries.
+    void recordInstalled(const QString& pkgName, long versionCode);
+    long installedCode(const QString& pkgName) const; // 0 when unknown
+
     bool isTrusted(const QString& pkgName) const;
     void setTrusted(const QString& pkgName, bool trusted);
 

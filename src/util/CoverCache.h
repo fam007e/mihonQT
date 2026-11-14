@@ -15,8 +15,10 @@ public:
     static CoverCache& instance();
 
     // Returns the cover if cached (memory or disk). Otherwise starts an async
-    // download and emits loaded(url, pixmap) when it arrives.
-    QPixmap load(const QString& url);
+    // download and emits loaded(url, pixmap) when it arrives. `referer` is
+    // the calling site's page origin — image CDNs with hotlink protection
+    // (e.g. webtoon-phinf.pstatic.net) 403 requests without it.
+    QPixmap load(const QString& url, const QString& referer = {});
 
     void clearMemoryCache();
 
@@ -32,6 +34,7 @@ private:
 
     QHash<QString, QPixmap> m_memory;
     QHash<QString, bool> m_inFlight;
+    QHash<QString, int> m_attempts;
     QNetworkAccessManager m_nam;
 };
 

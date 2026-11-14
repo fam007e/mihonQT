@@ -7,6 +7,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QUrl>
+#include <QRegularExpression>
+#include <QHash>
+#include <QDateTime>
 #include "config/PreferenceManager.h"
 #include <QVariant>
 #include <QApplication>
@@ -16,6 +19,23 @@ SharedCookieJar* NetworkAccessManager::sharedCookieJar()
 {
     static SharedCookieJar* s_jar = new SharedCookieJar(qApp);
     return s_jar;
+}
+
+// User-Agent override set from the WebEngine profile (see WebViewDialog);
+// empty until a challenge dialog has opened.
+static QString s_userAgentOverride;
+
+QString NetworkAccessManager::browserUserAgent()
+{
+    if (!s_userAgentOverride.isEmpty()) return s_userAgentOverride;
+    static const QString defaultUa = QStringLiteral(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    return defaultUa;
+}
+
+void NetworkAccessManager::setUserAgentOverride(const QString& ua)
+{
+    if (!ua.isEmpty()) s_userAgentOverride = ua;
 }
 
 NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) 
@@ -34,6 +54,123 @@ NetworkAccessManager::~NetworkAccessManager()
     m_networkManager.setCookieJar(nullptr);
 }
 
+bool NetworkAccessManager::setCookie(const QString& name, const QString& value)
+{
+    if (m_allowedBaseUrl.isEmpty() || name.isEmpty()) return false;
+    QUrl base(m_allowedBaseUrl);
+    if (!base.isValid() || base.host().isEmpty()) return false;
+
+    QNetworkCookie cookie(name.toUtf8(), value.toUtf8());
+    cookie.setDomain("." + base.host());
+    cookie.setPath("/");
+    return sharedCookieJar()->setCookiesFromUrl(QList<QNetworkCookie>{cookie}, base);
+}
+
+void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
+{
+    // Top-level Chrome navigation headers; sites behind CDNs/WAFs 403
+    // requests that lack the client hints and fetch metadata a browser sends.
+    // The client hints are derived from browserUserAgent() so they never
+    // contradict the UA (inconsistency is exactly what makes Cloudflare
+    // loop "Verifying you are human").
+    request.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+    request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
+    request.setRawHeader("Upgrade-Insecure-Requests", "1");
+
+    static const QRegularExpression chromeVerRe("Chrome/(\\d+)");
+    const QString ua = browserUserAgent();
+    int major = 120;
+    QRegularExpressionMatch m = chromeVerRe.match(ua);
+    if (m.hasMatch()) major = m.captured(1).toInt();
+    request.setRawHeader("sec-ch-ua",
+        QStringLiteral("\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"%1\", \"Google Chrome\";v=\"%1\"").arg(major).toUtf8());
+    request.setRawHeader("sec-ch-ua-mobile", "?0");
+    const char* platform = ua.contains("Windows NT") ? "Windows"
+        : (ua.contains("Mac OS X") || ua.contains("Macintosh")) ? "macOS"
+        : (ua.contains("Linux") || ua.contains("X11")) ? "Linux" : "Unknown";
+    request.setRawHeader("sec-ch-ua-platform", QStringLiteral("\"%1\"").arg(platform).toUtf8());
+
+    request.setRawHeader("Sec-Fetch-Dest", "document");
+    request.setRawHeader("Sec-Fetch-Mode", "navigate");
+    request.setRawHeader("Sec-Fetch-Site", "none");
+    request.setRawHeader("Sec-Fetch-User", "?1");
+}
+
+static bool bodyLooksLikeChallenge(const QByteArray& body)
+{
+    // For HTTP 200 responses: only actual interstitials. Broad markers like
+    // "challenge-platform" are injected by Cloudflare Bot Fight Mode into
+    // perfectly valid pages, so using them here would false-positive every
+    // request to protected sites.
+    return body.contains("Just a moment") || body.contains("Attention Required");
+}
+
+bool NetworkAccessManager::looksLikeChallenge(QNetworkReply* reply) const
+{
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (statusCode != 403 && statusCode != 503) return false;
+
+    if (reply->rawHeader("Server").toLower().contains("cloudflare")) return true;
+    // cf-mitigated: challenge is the canonical Cloudflare signal
+    if (reply->rawHeader("cf-mitigated").toLower().contains("challenge")) return true;
+
+    // Body sniff for challenges that don't advertise themselves in headers;
+    // broad markers are safe here because a 403/503 is already a refusal
+    const QString body = QString::fromUtf8(reply->peek(65536));
+    return body.contains("Just a moment") ||
+           body.contains("Attention Required") ||
+           body.contains("cf-chl") ||
+           body.contains("challenge-platform") ||
+           body.contains("Verify you are human");
+}
+
+bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& url)
+{
+    if (!looksLikeChallenge(reply)) return false;
+
+    // Only one challenge dialog at a time — parallel source calls failing on
+    // the same site should not stack modal dialogs on top of each other.
+    static bool solving = false;
+    if (solving) return false;
+
+    // Per-URL backoff: if a recent attempt for this URL produced no
+    // clearance cookie, fail the request instead of re-opening the dialog
+    // over and over while the user keeps browsing.
+    static QHash<QString, qint64> s_lastAttemptMs;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const qint64 last = s_lastAttemptMs.value(url, 0);
+    if (now - last < 30000) return false;
+    s_lastAttemptMs.insert(url, now);
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    qWarning() << "Bot challenge detected (" << statusCode << ") on" << url << "- opening WebView interceptor...";
+
+    bool success = false;
+    auto showDialog = [url, &success]() {
+        WebViewDialog dialog(url);
+        dialog.exec();
+
+        QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
+        if (!cookies.isEmpty()) {
+            sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+            success = true;
+        }
+    };
+
+    solving = true;
+    if (QThread::currentThread() == qApp->thread()) {
+        showDialog();
+    } else {
+        QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
+    }
+    solving = false;
+    if (!success) {
+        qDebug() << "Challenge dialog closed without a clearance cookie (site"
+                 << QUrl(url).host() << "- the challenge may not have completed)";
+    }
+    return success;
+}
+
 QJSValue NetworkAccessManager::get(const QString& url)
 {
     if (!isUrlAllowed(url)) {
@@ -44,7 +181,8 @@ QJSValue NetworkAccessManager::get(const QString& url)
     }
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
-    request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    request.setHeader(QNetworkRequest::UserAgentHeader, browserUserAgent());
+    applyBrowserHeaders(request);
     QNetworkReply *reply = m_networkManager.get(request);
 
     QEventLoop loop;
@@ -55,6 +193,18 @@ QJSValue NetworkAccessManager::get(const QString& url)
     QJSValue result;
     if (reply->error() == QNetworkReply::NoError) {
         QByteArray data = reply->readAll();
+
+        // Cloudflare managed challenges can come back as HTTP 200 with an
+        // HTML interstitial (observed on api.mangadex.org) — treat those as
+        // challenges too, or JS sources just see 2 KB of doctype-html.
+        if (bodyLooksLikeChallenge(data)) {
+            qWarning() << "200 response carries a challenge page for" << url << "- opening WebView interceptor...";
+            if (solveChallenge(reply, url)) {
+                reply->deleteLater();
+                return this->get(url); // Retry with the harvested cookies
+            }
+        }
+
         // Try to parse as JSON, otherwise return as string
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
@@ -70,32 +220,9 @@ QJSValue NetworkAccessManager::get(const QString& url)
             result = m_engine->toScriptValue(QString::fromUtf8(data));
         }
     } else {
-        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
-            qWarning() << "Cloudflare GET challenge detected! Opening WebView Interceptor...";
-            
-            bool success = false;
-            auto showDialog = [url, &success]() {
-                WebViewDialog dialog(url);
-                dialog.exec();
-                
-                QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
-                if (!cookies.isEmpty()) {
-                    sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
-                    success = true;
-                }
-            };
-
-            if (QThread::currentThread() == qApp->thread()) {
-                showDialog();
-            } else {
-                QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
-            }
-
-            if (success) {
-                reply->deleteLater();
-                return this->get(url); // Retry the request with the new cookies
-            }
+        if (solveChallenge(reply, url)) {
+            reply->deleteLater();
+            return this->get(url); // Retry the request with the new cookies
         }
 
         qWarning() << "Network GET request failed:" << reply->errorString();
@@ -121,7 +248,8 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    request.setHeader(QNetworkRequest::UserAgentHeader, browserUserAgent());
+    applyBrowserHeaders(request);
     QNetworkReply *reply = m_networkManager.post(request, data);
 
     QEventLoop loop;
@@ -145,30 +273,9 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
             result = m_engine->toScriptValue(QString::fromUtf8(responseData));
         }
     } else {
-        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
-            qWarning() << "Cloudflare POST challenge detected! Opening WebView Interceptor...";
-            bool success = false;
-            auto showDialog = [url, &success]() {
-                WebViewDialog dialog(url);
-                dialog.exec();
-                QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
-                if (!cookies.isEmpty()) {
-                    sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
-                    success = true;
-                }
-            };
-
-            if (QThread::currentThread() == qApp->thread()) {
-                showDialog();
-            } else {
-                QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
-            }
-
-            if (success) {
-                reply->deleteLater();
-                return this->post(url, data);
-            }
+        if (solveChallenge(reply, url)) {
+            reply->deleteLater();
+            return this->post(url, data);
         }
 
         qWarning() << "Network POST request failed:" << reply->errorString();

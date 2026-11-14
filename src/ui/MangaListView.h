@@ -16,10 +16,14 @@ public:
     explicit MangaListView(QWidget *parent = nullptr);
 
     void populateManga(const QList<Manga>& mangaList);
+    void appendManga(const QList<Manga>& mangaList);
 
 signals:
     void mangaSelected(const Manga& manga);
     void backRequested();
+    // Emitted when the grid is scrolled to (near) its end; the browse view
+    // uses this for Android-style continuous loading.
+    void bottomReached();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;

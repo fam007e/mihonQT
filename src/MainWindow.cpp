@@ -8,6 +8,7 @@
 #include <QDir>
 
 #include "source/LocalSource.h"
+#include "source/ExtensionManager.h"
 #include "ui/SourceListView.h"
 #include "ui/MangaListView.h"
 #include "ui/LibraryView.h"
@@ -81,6 +82,18 @@ MainWindow::MainWindow(QWidget *parent)
     if (QDir(localExt).exists() && QDir(localExt).canonicalPath() != dir.canonicalPath()) {
         m_sourceManager->loadExtensions(localExt, m_jsEngine, m_networkManager);
     }
+
+    // Hot-load installed/updated extensions without an app restart: the
+    // extension manager reports the pkg, we (re)load its file from the
+    // primary extensions directory and refresh the Browse > Sources list.
+    connect(&ExtensionManager::instance(), &ExtensionManager::extensionInstalled, this,
+            [this, extensionsPath](const QString& pkg) {
+                QString extPath = extensionsPath + "/" + pkg + ".js";
+                if (QFile::exists(extPath)) {
+                    m_sourceManager->loadSingleExtension(extPath, m_jsEngine, m_networkManager);
+                    m_sourceListView->refreshSources();
+                }
+            });
 
 
 
