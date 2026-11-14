@@ -112,13 +112,27 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     QJsonObject obj = val.toObject();
                     QString name = obj["name"].toString();
                     QString pkg = obj["pkg"].toString();
-                    // Assuming .js is in the same repo structure or construct URL
-                    // Most repos use: baseUrl/scripts/pkg.js
-                    QString downloadUrl = repo.baseUrl + "/scripts/" + pkg + ".js";
+                    QString apk = obj["apk"].toString();
+                    QString version = obj["version"].toString();
+                    // The index's `apk` field is the filename under the repo's
+                    // apk/ directory (mirrors ExtensionManager::getJsUrl());
+                    // fall back to the old scripts/ layout for repos without it.
+                    QString downloadUrl;
+                    if (!apk.isEmpty()) {
+                        downloadUrl = repo.baseUrl + "/apk/" + apk;
+                    } else {
+                        downloadUrl = repo.baseUrl + "/scripts/" + pkg + ".js";
+                    }
 
                     bool isTrusted = ExtensionManager::instance().isTrusted(pkg);
-                    QString displayName = name + (isTrusted ? " [Trusted]" : "");
-                    
+                    QString displayName = name;
+                    if (!version.isEmpty()) {
+                        displayName += " (v" + version + ")";
+                    }
+                    if (isTrusted) {
+                        displayName += " [Trusted]";
+                    }
+
                     QListWidgetItem *item = new QListWidgetItem(displayName, m_availableList);
                     item->setData(Qt::UserRole, pkg);
                     item->setData(Qt::UserRole + 1, downloadUrl);
