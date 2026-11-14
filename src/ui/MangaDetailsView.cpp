@@ -10,6 +10,8 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QPainter>
+#include <QKeyEvent>
 #include <QDialog>
 #include <QCheckBox>
 #include <QDialogButtonBox>
@@ -93,6 +95,7 @@ public:
         m_subLabel->setText(sub.join("  •  "));
 
         setCursor(Qt::PointingHandCursor);
+        setFocusPolicy(Qt::StrongFocus); // keyboard: Up/Down moves, Enter opens
         restyle();
     }
 
@@ -120,6 +123,34 @@ protected:
     {
         if (e->button() == Qt::LeftButton && onClick) onClick();
         QWidget::mousePressEvent(e);
+    }
+
+    void keyPressEvent(QKeyEvent *e) override
+    {
+        switch (e->key()) {
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+        case Qt::Key_Space:
+            if (onClick) onClick();
+            e->accept();
+            return;
+        default:
+            QWidget::keyPressEvent(e);
+        }
+    }
+
+    void paintEvent(QPaintEvent *e) override
+    {
+        QWidget::paintEvent(e);
+        // Focused-row highlight so keyboard navigation is visible
+        if (hasFocus()) {
+            QPainter p(this);
+            p.setRenderHint(QPainter::Antialiasing);
+            QPen pen(ThemeManager::instance().colors().primary);
+            pen.setWidthF(1.5);
+            p.setPen(pen);
+            p.drawRoundedRect(rect().adjusted(8, 2, -8, -2), 8, 8);
+        }
     }
 
 private:
@@ -476,4 +507,54 @@ void MangaDetailsView::mousePressEvent(QMouseEvent *event)
     } else {
         QWidget::mousePressEvent(event);
     }
+}
+
+QList<ChapterRow *> MangaDetailsView::chapterRows() const
+{
+    QList<ChapterRow*> rows;
+    for (int i = 0; i < m_chapterListLayout->count(); ++i) {
+        QLayoutItem *item = m_chapterListLayout->itemAt(i);
+        if (auto *row = dynamic_cast<ChapterRow*>(item->widget()))
+            rows.append(row);
+    }
+    return rows;
+}
+
+void MangaDetailsView::keyPressEvent(QKeyEvent *event)
+{
+    const QList<ChapterRow*> rows = chapterRows();
+    QWidget *focus = focusWidget();
+    int current = -1;
+    for (int i = 0; i < rows.size(); ++i)
+        if (rows[i] == focus) { current = i; break; }
+
+    switch (event->key()) {
+    case Qt::Key_Up:
+    case Qt::Key_Left:
+        if (rows.isEmpty()) break;
+        current = (current <= 0) ? rows.size() - 1 : current - 1;
+        rows[current]->setFocus();
+        m_scrollArea->ensureWidgetVisible(rows[current]);
+        event->accept();
+        return;
+    case Qt::Key_Down:
+    case Qt::Key_Right:
+        if (rows.isEmpty()) break;
+        current = (current < 0 || current >= rows.size() - 1) ? 0 : current + 1;
+        rows[current]->setFocus();
+        m_scrollArea->ensureWidgetVisible(rows[current]);
+        event->accept();
+        return;
+    default:
+        break;
+    }
+    QWidget::keyPressEvent(event);
+}
+
+void MangaDetailsView::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    // Focus the first chapter row so Up/Down work immediately
+    const QList<ChapterRow*> rows = chapterRows();
+    if (!rows.isEmpty()) rows.first()->setFocus();
 }

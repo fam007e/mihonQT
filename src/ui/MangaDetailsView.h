@@ -7,8 +7,11 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 #include <QPixmap>
+#include <QKeyEvent>
 #include "model/Manga.h"
 #include "model/Chapter.h"
+
+class ChapterRow; // defined in MangaDetailsView.cpp
 
 // Mihon-style manga details screen:
 //  - cover + title/author/status header
@@ -29,9 +32,12 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void setupUi();
+    QList<ChapterRow*> chapterRows() const;
     void refreshChapters();
     void updateLibraryButton();
     void updateSortButton();

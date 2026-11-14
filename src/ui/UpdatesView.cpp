@@ -28,6 +28,7 @@ void UpdatesView::setupUi()
     m_listWidget = new QListWidget(this);
     UiUtils::applyListWidgetStyle(m_listWidget);
     connect(m_listWidget, &QListWidget::itemClicked, this, &UpdatesView::onItemClicked);
+    connect(m_listWidget, &QListWidget::itemActivated, this, &UpdatesView::onItemClicked); // Enter key too
     layout->addWidget(m_listWidget);
 }
 

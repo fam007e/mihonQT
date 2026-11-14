@@ -1,4 +1,5 @@
 #include "SourceListView.h"
+#include "ThemeManager.h"
 #include <QVBoxLayout>
 #include <QHeaderView>
 #include <QMenu>
@@ -25,6 +26,7 @@ SourceListView::SourceListView(SourceManager *sourceManager, QWidget *parent)
     m_sourceListWidget->setContextMenuPolicy(Qt::CustomContextMenu);
 
     connect(m_sourceListWidget, &QListWidget::itemClicked, this, &SourceListView::onSourceClicked);
+    connect(m_sourceListWidget, &QListWidget::itemActivated, this, &SourceListView::onSourceClicked); // Enter key too
     connect(m_sourceListWidget, &QListWidget::customContextMenuRequested, this, &SourceListView::onCustomContextMenuRequested);
 }
 
@@ -101,7 +103,8 @@ void SourceListView::setupUi()
     QLabel *titleLabel = new QLabel("Sources", this);
     titleLabel->setFont(QFont("Inter", 16, QFont::Bold));
     titleLabel->setAlignment(Qt::AlignCenter);
-    titleLabel->setStyleSheet("padding: 20px; color: #ECEFF4;");
+    titleLabel->setStyleSheet(QStringLiteral("padding: 20px; color: %1; background: transparent;")
+        .arg(ThemeManager::instance().colors().onBackground.name()));
 
     layout->addWidget(titleLabel);
     layout->addWidget(m_sourceListWidget);

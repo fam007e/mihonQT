@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QToolButton>
+#include <QKeyEvent>
 
 class SidebarWidget : public QWidget
 {
@@ -23,8 +24,14 @@ private:
     QToolButton *m_browseBtn;
     QToolButton *m_moreBtn;
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
+private:
     void setupUi();
     void restyle();
+    QList<QToolButton*> navButtons() const;
+    QWidget *focusedChild() const;
     QToolButton* createNavButton(const QString &text, const QString &iconName, int index);
 };
 

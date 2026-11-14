@@ -9,6 +9,7 @@
 #include <QTabBar>
 #include <QMenu>
 #include <QLabel>
+#include <QKeyEvent>
 #include "model/Manga.h"
 
 class MangaCoverCard;
@@ -27,6 +28,7 @@ signals:
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
 
 private:
