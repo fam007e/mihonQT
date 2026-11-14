@@ -121,6 +121,22 @@ bool ExtensionManager::isInstalled(const QString& pkgName, const QString& extens
     return false;
 }
 
+void ExtensionManager::recordInstalled(const QString& pkgName, long versionCode)
+{
+    QSettings settings("MihonQT", "MihonQT");
+    QVariantMap installed = settings.value("installed_extension_codes").toMap();
+    installed.insert(pkgName, static_cast<qlonglong>(versionCode));
+    settings.setValue("installed_extension_codes", installed);
+    emit extensionInstalled(pkgName);
+}
+
+long ExtensionManager::installedCode(const QString& pkgName) const
+{
+    QSettings settings("MihonQT", "MihonQT");
+    QVariantMap installed = settings.value("installed_extension_codes").toMap();
+    return installed.value(pkgName, 0).toLongLong();
+}
+
 bool ExtensionManager::isTrusted(const QString& pkgName) const
 {
     QStringList trustedExts = PreferenceManager::instance().value(PreferenceManager::TRUSTED_EXTENSIONS).toStringList();

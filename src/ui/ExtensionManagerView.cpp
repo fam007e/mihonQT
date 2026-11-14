@@ -60,23 +60,27 @@ void ExtensionManagerView::setupUi()
     connect(m_availableList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
         QString pkgName = item->data(Qt::UserRole).toString();
         QString downloadUrl = item->data(Qt::UserRole + 1).toString();
-        
+        long long indexCode = item->data(Qt::UserRole + 2).toLongLong();
+
         if (QMessageBox::question(this, "Install Extension", "Do you want to install " + item->text() + "?") == QMessageBox::Yes) {
             // Basic download logic
             QNetworkAccessManager *manager = new QNetworkAccessManager(this);
             QNetworkReply *reply = manager->get(QNetworkRequest(QUrl(downloadUrl)));
-            
-            connect(reply, &QNetworkReply::finished, this, [this, reply, pkgName]() {
+
+            connect(reply, &QNetworkReply::finished, this, [this, reply, pkgName, indexCode]() {
                 if (reply->error() == QNetworkReply::NoError) {
                     QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
                     QString extensionsPath = dataDir + "/extensions/" + pkgName + ".js";
                     QDir().mkpath(dataDir + "/extensions");
-                    
+
                     QFile file(extensionsPath);
                     if (file.open(QIODevice::WriteOnly)) { // flawfinder: ignore
                         file.write(reply->readAll());
                         file.close();
-                        QMessageBox::information(this, "Success", "Extension installed. Restart recommended.");
+                        // Record the version and notify listeners so the source
+                        // hot-loads into the browse list without a restart.
+                        ExtensionManager::instance().recordInstalled(pkgName, indexCode);
+                        QMessageBox::information(this, "Success", "Extension installed. It is available immediately in Browse > Sources.");
                     }
                 }
                 reply->deleteLater();
@@ -115,6 +119,7 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     QString pkg = obj["pkg"].toString();
                     QString apk = obj["apk"].toString();
                     QString version = obj["version"].toString();
+                    long long indexCode = obj["code"].toVariant().toLongLong();
                     // The index's `apk` field is the filename under the repo's
                     // apk/ directory (mirrors ExtensionManager::getJsUrl());
                     // fall back to the old scripts/ layout for repos without it.
@@ -126,9 +131,16 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     }
 
                     bool isTrusted = ExtensionManager::instance().isTrusted(pkg);
+                    long installedCode = ExtensionManager::instance().installedCode(pkg);
                     QString displayName = name;
                     if (!version.isEmpty()) {
                         displayName += " (v" + version + ")";
+                    }
+                    if (installedCode > 0) {
+                        displayName += " · installed";
+                        if (indexCode > installedCode) {
+                            displayName += " — update available";
+                        }
                     }
 
                     // Row widget: name + inline trust toggle (double-click
@@ -136,6 +148,7 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     QListWidgetItem *item = new QListWidgetItem(m_availableList);
                     item->setData(Qt::UserRole, pkg);
                     item->setData(Qt::UserRole + 1, downloadUrl);
+                    item->setData(Qt::UserRole + 2, static_cast<qlonglong>(indexCode));
 
                     QWidget *row = new QWidget;
                     QHBoxLayout *rowLayout = new QHBoxLayout(row);

@@ -18,9 +18,15 @@ public:
 
     void addSource(SourceBase* source);
     void loadExtensions(const QString& directoryPath, QJSEngine* engine, NetworkAccessManager* networkManager);
+    // Load (or replace, on update) a single extension file and register it.
+    // Used to hot-load newly installed/updated extensions without a restart.
+    SourceBase* loadSingleExtension(const QString& jsFilePath, QJSEngine* engine, NetworkAccessManager* networkManager);
     SourceBase* getSourceById(long id) const;
     SourceBase* getSourceByName(const QString& name) const;
     QList<SourceBase*> getAllSources() const;
+
+signals:
+    void sourcesChanged();
 
 private:
     QList<SourceBase*> m_sources;

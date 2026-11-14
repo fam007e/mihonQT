@@ -75,6 +75,30 @@ void SourceManager::loadExtensions(const QString& directoryPath, QJSEngine* engi
     }
 }
 
+SourceBase* SourceManager::loadSingleExtension(const QString& jsFilePath, QJSEngine* engine, NetworkAccessManager* networkManager)
+{
+    qDebug() << "Hot-loading extension script:" << jsFilePath;
+    JavascriptSource* source = new JavascriptSource(jsFilePath, engine, networkManager, this);
+    if (source->id() <= 0) {
+        qWarning() << "Hot-load skipped invalid source (invalid ID) from:" << jsFilePath;
+        delete source;
+        return nullptr;
+    }
+
+    // Replace any previously registered source with the same id (an update
+    // overwrote the file) so the fresh script takes effect immediately.
+    if (SourceBase* old = m_sourcesById.value(source->id(), nullptr)) {
+        m_sources.removeOne(old);
+        m_sourcesById.remove(old->id());
+        m_sourcesByName.remove(old->name());
+        old->deleteLater();
+    }
+
+    addSource(source);
+    emit sourcesChanged();
+    return source;
+}
+
 
 SourceBase* SourceManager::getSourceById(long id) const
 {

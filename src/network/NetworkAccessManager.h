@@ -45,6 +45,10 @@ public:
     void setAllowedBaseUrl(const QString& baseUrl) { m_allowedBaseUrl = baseUrl; }
 
     static SharedCookieJar* sharedCookieJar();
+    // The browser UA used for all extension network requests. The WebView
+    // challenge dialog must use the SAME UA: Cloudflare binds cf_clearance
+    // to the User-Agent, so a mismatch makes harvested cookies worthless.
+    static QString browserUserAgent();
 
 signals:
     void requestFinished(const QJSValue& result);
@@ -55,7 +59,7 @@ private slots:
 private:
     QNetworkAccessManager m_networkManager;
     QJSEngine* m_engine;
-    QString m_userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    QString m_userAgent = browserUserAgent();
     bool m_isTrusted = true;
     QString m_allowedBaseUrl;
 

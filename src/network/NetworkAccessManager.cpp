@@ -18,6 +18,13 @@ SharedCookieJar* NetworkAccessManager::sharedCookieJar()
     return s_jar;
 }
 
+QString NetworkAccessManager::browserUserAgent()
+{
+    static const QString ua = QStringLiteral(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    return ua;
+}
+
 NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) 
     : QObject(parent)
     , m_engine(engine) 
