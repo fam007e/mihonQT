@@ -141,6 +141,10 @@ bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& u
         QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
     }
     solving = false;
+    if (!success) {
+        qDebug() << "Challenge dialog closed without a clearance cookie (site"
+                 << QUrl(url).host() << "- the challenge may not have completed)";
+    }
     return success;
 }
 

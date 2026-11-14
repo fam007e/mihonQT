@@ -4,6 +4,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QUrl>
 #include <QDir>
 #include <QFileInfo>
 #include <QFontMetrics>
@@ -173,7 +174,14 @@ void MangaCoverCard::loadCover()
         return;
 
     if (thumb.startsWith("http://") || thumb.startsWith("https://")) {
-        QPixmap cached = CoverCache::instance().load(thumb);
+        // Image CDNs with hotlink protection want a Referer from the site
+        // the cover belongs to; the manga page URL's origin is the best hint.
+        QString referer;
+        const QUrl mangaUrl(m_manga.url());
+        if (mangaUrl.isValid() && (mangaUrl.scheme() == "http" || mangaUrl.scheme() == "https")) {
+            referer = mangaUrl.scheme() + "://" + mangaUrl.host() + "/";
+        }
+        QPixmap cached = CoverCache::instance().load(thumb, referer);
         if (!cached.isNull())
             setCoverImage(cached);
     } else {
