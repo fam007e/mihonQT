@@ -102,13 +102,13 @@ public:
     void restyle()
     {
         const M3Colors& c = ThemeManager::instance().colors();
-        const bool read = m_chapter.isRead();
+        const bool read = m_chapter.isRead(); // flawfinder: ignore (identifier contains "read", not libc read)
         m_titleLabel->setStyleSheet(QStringLiteral(
             "font-size: 14px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f) : c.onSurface.name()));
+            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f) : c.onSurface.name())); // flawfinder: ignore
         m_subLabel->setStyleSheet(QStringLiteral(
             "font-size: 12px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f)
+            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f) // flawfinder: ignore
                       : c.onSurfaceVariant.name()));
         m_unreadDot->setStyleSheet(read
             ? "background: transparent;"

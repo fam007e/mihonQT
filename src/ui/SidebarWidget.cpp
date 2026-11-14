@@ -67,6 +67,13 @@ QList<QToolButton*> SidebarWidget::navButtons() const
     return { m_libraryBtn, m_updatesBtn, m_historyBtn, m_browseBtn, m_moreBtn };
 }
 
+void SidebarWidget::focusCurrent()
+{
+    for (QToolButton *b : navButtons())
+        if (b->isChecked()) { b->setFocus(); return; }
+    m_libraryBtn->setFocus();
+}
+
 void SidebarWidget::keyPressEvent(QKeyEvent *event)
 {
     const QList<QToolButton*> buttons = navButtons();

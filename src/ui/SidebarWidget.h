@@ -13,6 +13,8 @@ class SidebarWidget : public QWidget
 public:
     explicit SidebarWidget(QWidget *parent = nullptr);
 
+    void focusCurrent(); // keyboard focus on the checked rail button
+
 signals:
     void navigationRequested(int index); // 0: Library, 1: Updates, 2: History, 3: Browse, 4: More
 

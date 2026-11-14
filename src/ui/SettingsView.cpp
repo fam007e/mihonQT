@@ -179,18 +179,18 @@ void SettingsView::createAppearancePage() {
 
   QLabel *themeLabel = new QLabel("Application Theme:", this);
   m_themeComboBox = new QComboBox(this);
-  // Order must match ThemeManager::Theme enum
-  m_themeComboBox->addItem("Mihon Default");
-  m_themeComboBox->addItem("Nord Dark");
-  m_themeComboBox->addItem("Nord Light");
-  m_themeComboBox->addItem("Catppuccin Mocha");
-  m_themeComboBox->addItem("Catppuccin Frappe");
-  m_themeComboBox->addItem("Tokyo Night");
-  m_themeComboBox->addItem("Dracula");
+  // Data carries the ThemeManager::Theme enum value (do NOT rely on index order)
+  m_themeComboBox->addItem("Mihon Default", (int)ThemeManager::MihonDefault);
+  m_themeComboBox->addItem("Nord Dark", (int)ThemeManager::NordDark);
+  m_themeComboBox->addItem("Nord Light", (int)ThemeManager::NordLight);
+  m_themeComboBox->addItem("Catppuccin Mocha", (int)ThemeManager::CatppuccinMocha);
+  m_themeComboBox->addItem("Catppuccin Frappe", (int)ThemeManager::CatppuccinFrappe);
+  m_themeComboBox->addItem("Tokyo Night", (int)ThemeManager::TokyoNight);
+  m_themeComboBox->addItem("Dracula", (int)ThemeManager::Dracula);
 
-  // Set current theme
+  // Set current theme by stored data, not positional index
   ThemeManager::Theme current = ThemeManager::instance().currentTheme();
-  m_themeComboBox->setCurrentIndex((int)current);
+  m_themeComboBox->setCurrentIndex(m_themeComboBox->findData((int)current));
 
   connect(m_themeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &SettingsView::onThemeChanged);
@@ -1016,31 +1016,10 @@ void SettingsView::onCategoryChanged(int index) {
 }
 
 void SettingsView::onThemeChanged(int index) {
-  ThemeManager::Theme theme;
-  switch (index) {
-  case 0:
-    theme = ThemeManager::NordDark;
-    break;
-  case 1:
-    theme = ThemeManager::NordLight;
-    break;
-  case 2:
-    theme = ThemeManager::CatppuccinMocha;
-    break;
-  case 3:
-    theme = ThemeManager::CatppuccinFrappe;
-    break;
-  case 4:
-    theme = ThemeManager::TokyoNight;
-    break;
-  case 5:
-    theme = ThemeManager::Dracula;
-    break;
-  default:
-    theme = ThemeManager::NordDark;
-    break;
-  }
-  ThemeManager::instance().applyTheme(theme);
+  // Read the Theme enum from the item's data (index order is not the enum)
+  const QVariant data = m_themeComboBox->itemData(index);
+  if (!data.isValid()) return;
+  ThemeManager::instance().applyTheme(static_cast<ThemeManager::Theme>(data.toInt()));
 }
 
 void SettingsView::onReadingModeChanged(int index) {

@@ -491,8 +491,9 @@ void MainWindow::onNavigationRequested(int index)
 
         m_contentStack->setCurrentIndex(stackIndex);
 
-        // Give the view keyboard focus so arrow keys work immediately
-        focusFirstWidget(m_contentStack->currentWidget());
+        // Keyboard focus starts on the nav rail (Up/Down + Enter), matching
+        // the app's hub-and-spoke navigation; Tab reaches view content.
+        m_sidebar->focusCurrent();
     }
 }
 
