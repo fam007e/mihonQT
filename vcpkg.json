@@ -2,7 +2,9 @@
   "name": "mihon-qt",
   "version-string": "1.0.0-alpha",
   "dependencies": [
-    "zlib"
+    "zlib",
+    "gumbo",
+    "libwebp"
   ],
   "builtin-baseline": "47205630845bd49eaf16cdfb757cf9dfba144c52"
 }
