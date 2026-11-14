@@ -59,8 +59,13 @@ private slots:
     void onIncognitoChanged(bool enabled);
     void onDownloadedOnlyChanged(bool enabled);
 
+protected:
+    // Global keyboard handling (Esc = back navigation)
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     void setupUi();
+    QWidget *focusFirstWidget(QWidget *page); // focus first keyboard-navigable widget of a view
     void showSourceList(); // New method to show the source list view
     void showMangaList(long sourceId); // New method to show manga list for a source
     void showReader(long mangaId, long chapterId, bool startAtEnd = false);

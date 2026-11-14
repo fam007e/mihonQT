@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QMouseEvent>
+#include <QKeyEvent>
 
 class MoreView : public QWidget
 {
@@ -34,14 +35,20 @@ public slots:
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setupUi();
+    QList<QWidget*> focusableRows() const;
+    void moveRowFocus(int delta);
+    QScrollArea *m_scrollArea = nullptr;
     void addActionItem(const QString& icon, const QString& title, const QString& subtitle, const std::function<void()>& callback);
     QCheckBox* addToggleItem(const QString& icon, const QString& title, const QString& subtitle, bool initialValue, const std::function<void(bool)>& callback);
     void addSeparator();
 
     QVBoxLayout *m_listLayout;
+    QList<QWidget*> m_rowWidgets; // keyboard-cyclable rows (containers/buttons)
     QLabel *m_logoLabel;
     QLabel *m_qtBadge;
     QCheckBox *m_downloadedOnlyToggle;

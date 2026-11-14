@@ -24,6 +24,7 @@
 #include "ui/CategoryEditDialog.h"
 
 #include <QMenuBar>
+#include <QShortcut>
 #include <QMessageBox>
 #include <QDesktopServices>
 #include <QUrl>
@@ -31,6 +32,11 @@
 #include <QVBoxLayout>
 #include <QSettings>
 #include <QDateTime>
+#include <QKeyEvent>
+#include <QLineEdit>
+#include <QApplication>
+#include <QListWidget>
+#include "ui/UiUtils.h"
 #include "config/PreferenceManager.h"
 
 MainWindow::MainWindow(QWidget *parent)
@@ -297,6 +303,61 @@ void MainWindow::setupUi()
 
     // Apply default theme (Mihon Default, matching the Android app)
     ThemeManager::instance().applyTheme(ThemeManager::MihonDefault);
+
+    // Re-style every UiUtils-styled list when the theme changes (views
+    // capture token colors at construction time otherwise).
+    connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this, [this](ThemeManager::Theme) {
+        const QList<QListWidget*> lists = findChildren<QListWidget*>();
+        for (QListWidget *lw : lists)
+            UiUtils::applyListWidgetStyle(lw);
+    });
+
+    // Global keyboard: Esc navigates back (see eventFilter)
+    qApp->installEventFilter(this);
+
+    // Rail → content (Right arrow) and Ctrl+Q quit
+    connect(m_sidebar, &SidebarWidget::focusContentRequested, this, [this]() {
+        focusFirstWidget(m_contentStack->currentWidget());
+    });
+    connect(m_sidebar, &SidebarWidget::backRequested, this, &MainWindow::onBackRequested);
+
+    auto *quitShortcut = new QShortcut(QKeySequence("Ctrl+Q"), this);
+    connect(quitShortcut, &QShortcut::activated, this, &QWidget::close);
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::KeyPress) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape) {
+            // Don't hijack Esc from the reader (it manages its own overlays),
+            // from line edits (clears focus/cancel), or while a modal is open.
+            QWidget *focus = QApplication::focusWidget();
+            bool inReader = m_rootStack->currentWidget() == m_readerWidget;
+            bool inLineEdit = qobject_cast<QLineEdit*>(focus) != nullptr
+                || qobject_cast<QLineEdit*>(focus ? focus->parentWidget() : nullptr) != nullptr;
+            bool modalOpen = QApplication::activeModalWidget() != nullptr
+                || QApplication::activePopupWidget() != nullptr;
+
+            if (!inReader && !inLineEdit && !modalOpen) {
+                onBackRequested();
+                return true;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+QWidget *MainWindow::focusFirstWidget(QWidget *page)
+{
+    for (QWidget *w : page->findChildren<QWidget*>()) {
+        if (w->isVisibleTo(page) && (w->focusPolicy() & Qt::StrongFocus) && !w->focusProxy()) {
+            w->setFocus();
+            return w;
+        }
+    }
+    page->setFocus();
+    return page;
 }
 
 void MainWindow::onSourceSelected(long sourceId)
@@ -439,6 +500,10 @@ void MainWindow::onNavigationRequested(int index)
         }
 
         m_contentStack->setCurrentIndex(stackIndex);
+
+        // Keyboard focus starts on the nav rail (Up/Down + Enter), matching
+        // the app's hub-and-spoke navigation; Tab reaches view content.
+        m_sidebar->focusCurrent();
     }
 }
 

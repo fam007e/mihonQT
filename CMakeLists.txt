@@ -24,8 +24,10 @@ find_package(Qt6 COMPONENTS Core Gui Widgets Sql Concurrent Quick Qml Core5Compa
 
 # --- Gumbo HTML5 Parser & WebP ---
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GUMBO REQUIRED gumbo)
-pkg_check_modules(WEBP REQUIRED libwebp)
+# IMPORTED_TARGET carries include dirs AND the library search path, which
+# bare ${GUMBO_LIBRARIES} lacks (breaks linking against Homebrew on macOS).
+pkg_check_modules(GUMBO IMPORTED_TARGET REQUIRED gumbo)
+pkg_check_modules(WEBP IMPORTED_TARGET REQUIRED libwebp)
 
 # --- QuaZip ---
 set(QUAZIP_QT_MAJOR_VERSION 6 CACHE STRING "Qt version to use (6 or 5)" FORCE)
@@ -86,7 +88,7 @@ add_executable(MihonQT
 )
 
 # --- Link Libraries ---
-target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip ${GUMBO_LIBRARIES} ${WEBP_LIBRARIES}) # Link QuaZip, WebEngine, Gumbo and WebP
+target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip PkgConfig::GUMBO PkgConfig::WEBP) # Link QuaZip, WebEngine, Gumbo and WebP
 
 # --- Deployment ---
 if(WIN32)
@@ -139,7 +141,7 @@ if(BUILD_TESTS)
         )
         target_link_libraries(${test_name} PRIVATE
             Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Test
-            ${GUMBO_LIBRARIES} ${WEBP_LIBRARIES}
+            PkgConfig::GUMBO PkgConfig::WEBP
         )
         add_test(NAME ${test_name} COMMAND ${test_name})
     endfunction()
@@ -181,7 +183,7 @@ if(BUILD_FUZZERS)
         )
         target_link_libraries(${fuzzer_name} PRIVATE
             Qt6::Core Qt6::Gui
-            ${GUMBO_LIBRARIES} ${WEBP_LIBRARIES}
+            PkgConfig::GUMBO PkgConfig::WEBP
         )
     endfunction()
 

@@ -46,6 +46,7 @@ void MangaCoverCard::setupUi()
 {
     setFrameShape(QFrame::NoFrame);
     setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::StrongFocus); // keyboard navigation (arrows move, Enter opens)
     setFixedSize(CoverW + 8, CoverH + 8 + 34); // cover + margins + two-line title
 
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -205,6 +206,20 @@ void MangaCoverCard::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton)
         emit clicked(m_manga);
     QFrame::mousePressEvent(event);
+}
+
+void MangaCoverCard::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+    case Qt::Key_Space:
+        emit clicked(m_manga);
+        event->accept();
+        return;
+    default:
+        QFrame::keyPressEvent(event);
+    }
 }
 
 void MangaCoverCard::enterEvent(QEnterEvent *event)

@@ -4,6 +4,7 @@
 #include <QFrame>
 #include <QLabel>
 #include <QPixmap>
+#include <QKeyEvent>
 #include "../model/Manga.h"
 
 // Mihon "comfortable grid" manga card:
@@ -29,6 +30,7 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
 

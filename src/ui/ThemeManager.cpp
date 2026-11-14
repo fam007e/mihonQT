@@ -215,6 +215,11 @@ static M3Colors draculaDark()
 
 ThemeManager::ThemeManager(QObject *parent) : QObject(parent)
 {
+    // Seed tokens immediately: views are constructed before MainWindow calls
+    // applyTheme(), and default-constructed QColors render as black, which
+    // produced black-on-black selected items in History/Settings.
+    m_colors = mihonDefaultDark();
+    m_isDark = true;
 }
 
 ThemeManager& ThemeManager::instance()

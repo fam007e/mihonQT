@@ -9,6 +9,12 @@ on:
     - cron: '30 2 * * 1'
   workflow_dispatch:
 
+# Supersede in-flight runs on rapid pushes: the latest commit's analysis
+# is the only one that matters, and cancelling avoids runner pile-ups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})

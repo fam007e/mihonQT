@@ -24,6 +24,12 @@ on:
       - 'resources.qrc'
       - '.github/workflows/build.yml'
 
+# Supersede in-flight runs on rapid pushes: the latest commit's analysis
+# is the only one that matters, and cancelling avoids runner pile-ups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     name: ${{ matrix.os }} - Build
@@ -63,7 +69,27 @@ jobs:
     - name: Windows - Setup vcpkg
       if: matrix.os == 'windows-latest'
       run: |
+        # The pre-installed clone is shallow/old and cannot resolve manifest
+        # baselines newer than itself; fetch master first.
+        git -C "$env:VCPKG_INSTALLATION_ROOT" fetch origin master
+        git -C "$env:VCPKG_INSTALLATION_ROOT" pull origin master
         vcpkg integrate install
+
+    - name: Windows - Setup vcpkg binary cache
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "C:\vcpkg-binary-cache" | Out-Null
+        "VCPKG_DEFAULT_BINARY_CACHE=C:\vcpkg-binary-cache" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    # Restores prebuilt vcpkg packages instantly; the key changes (and vcpkg
+    # rebuilds only what it must) whenever vcpkg.json gains/changes packages.
+    - name: Windows - Restore vcpkg binary cache
+      if: matrix.os == 'windows-latest'
+      uses: actions/cache@v4
+      with:
+        path: C:\vcpkg-binary-cache
+        key: vcpkg-bin-windows-x64-${{ hashFiles('vcpkg.json') }}
 
     - name: Windows - Build
       if: matrix.os == 'windows-latest'
@@ -80,7 +106,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake qt6-base-dev qt6-webengine-dev libquazip1-qt6-dev
+        sudo apt-get install -y build-essential cmake pkg-config qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libgumbo-dev libwebp-dev libquazip1-qt6-dev
 
     - name: Ubuntu - Build
       if: matrix.os == 'ubuntu-latest'
@@ -93,7 +119,8 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         brew update
-        brew install qt quazip
+        brew install qt gumbo-parser webp pkg-config
+        echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
     - name: macOS - Build
       if: matrix.os == 'macos-latest'

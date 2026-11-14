@@ -250,6 +250,44 @@ void LibraryView::updateGridLayout()
     }
 }
 
+void LibraryView::keyPressEvent(QKeyEvent *event)
+{
+    // Arrow-key grid navigation across manga cards; Enter opens (handled by card)
+    if (m_cards.isEmpty()) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
+    // Compute current focus index
+    QWidget *focus = focusWidget();
+    int current = -1;
+    for (int i = 0; i < m_cards.size(); ++i)
+        if (m_cards[i] == focus) { current = i; break; }
+    if (current < 0) {
+        current = 0;
+        m_cards[current]->setFocus();
+        event->accept();
+        return;
+    }
+
+    int columns = qMax(1, m_scrollArea->viewport()->width() / (128 + 12));
+    int target = current;
+    switch (event->key()) {
+    case Qt::Key_Left:  target = qMax(0, current - 1); break;
+    case Qt::Key_Right: target = qMin(m_cards.size() - 1, current + 1); break;
+    case Qt::Key_Up:    target = qMax(0, current - columns); break;
+    case Qt::Key_Down:  target = qMin(m_cards.size() - 1, current + columns); break;
+    default:
+        QWidget::keyPressEvent(event);
+        return;
+    }
+    if (target != current) {
+        m_cards[target]->setFocus();
+        m_scrollArea->ensureWidgetVisible(m_cards[target]);
+    }
+    event->accept();
+}
+
 void LibraryView::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);

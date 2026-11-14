@@ -35,6 +35,7 @@ void HistoryView::setupUi()
     m_listWidget = new QListWidget(this);
     UiUtils::applyListWidgetStyle(m_listWidget);
     connect(m_listWidget, &QListWidget::itemClicked, this, &HistoryView::onItemClicked);
+    connect(m_listWidget, &QListWidget::itemActivated, this, &HistoryView::onItemClicked); // Enter key too
     layout->addWidget(m_listWidget);
 }
 

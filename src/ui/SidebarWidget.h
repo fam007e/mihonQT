@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QToolButton>
+#include <QKeyEvent>
 
 class SidebarWidget : public QWidget
 {
@@ -12,8 +13,12 @@ class SidebarWidget : public QWidget
 public:
     explicit SidebarWidget(QWidget *parent = nullptr);
 
+    void focusCurrent(); // keyboard focus on the checked rail button
+
 signals:
     void navigationRequested(int index); // 0: Library, 1: Updates, 2: History, 3: Browse, 4: More
+    void focusContentRequested();        // Right arrow: move focus into the current view
+    void backRequested();                // Left arrow: navigate back
 
 private:
     QVBoxLayout *m_layout;
@@ -23,8 +28,14 @@ private:
     QToolButton *m_browseBtn;
     QToolButton *m_moreBtn;
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
+private:
     void setupUi();
     void restyle();
+    QList<QToolButton*> navButtons() const;
+    QWidget *focusedChild() const;
     QToolButton* createNavButton(const QString &text, const QString &iconName, int index);
 };
 
