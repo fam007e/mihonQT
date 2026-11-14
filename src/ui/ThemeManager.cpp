@@ -317,6 +317,10 @@ void ThemeManager::applyPalette()
     p.setColor(QPalette::PlaceholderText, c.onSurfaceVariant);
     p.setColor(QPalette::Disabled, QPalette::Text, rgba(c.onSurface, 0.38f));
     p.setColor(QPalette::Disabled, QPalette::ButtonText, rgba(c.onSurface, 0.38f));
+    // Tooltips: guaranteed-contrast pair (some widgets paint tooltips from
+    // the palette rather than the app stylesheet)
+    p.setColor(QPalette::ToolTipBase, c.surfaceContainerHighest);
+    p.setColor(QPalette::ToolTipText, c.onBackground);
     qApp->setPalette(p);
 }
 
@@ -408,7 +412,7 @@ void ThemeManager::applyGlobalQss()
         "QProgressBar::chunk { background-color: %PRIM%; border-radius: 2px; }"
 
         // --- Tooltips / groups / split ---
-        "QToolTip { background-color: %INV_SURF%; color: %ONINV_SURF%; border: none; padding: 6px 8px; border-radius: 6px; }"
+        "QToolTip { background-color: %SURF_HIGHEST%; color: %ONBG%; border: 1px solid %OUTLINE%; padding: 6px 8px; border-radius: 6px; }"
         "QGroupBox { border: 1px solid %OUTLINE_VAR%; border-radius: 12px; margin-top: 14px;"
         "  padding-top: 10px; color: %ONSURF%; font-weight: 600; }"
         "QGroupBox::title { subcontrol-origin: margin; left: 12px; top: 2px; color: %ONSURFVAR%; }"

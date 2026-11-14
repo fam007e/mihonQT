@@ -34,6 +34,7 @@ private:
 
     QHash<QString, QPixmap> m_memory;
     QHash<QString, bool> m_inFlight;
+    QHash<QString, int> m_attempts;
     QNetworkAccessManager m_nam;
 };
 

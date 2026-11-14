@@ -90,15 +90,31 @@ QPixmap CoverCache::load(const QString& url, const QString& referer)
     }
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
+    // A grid fires ~20 parallel cover fetches at one CDN; HTTP/2 multiplexing
+    // gets streams refused (REFUSED_STREAM). Plain HTTP/1.1 connections and
+    // one retry below handle it.
+    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
 
     QNetworkReply *reply = m_nam.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply, url, key]() {
         reply->deleteLater();
         m_inFlight.remove(url);
         if (reply->error() != QNetworkReply::NoError) {
-            qWarning() << "Cover download failed:" << url << reply->errorString();
+            // Up to 2 retries for transient errors (HTTP/2 REFUSED_STREAM,
+            // resets); hard refusals like 403 are not retried.
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const int attempt = m_attempts.value(url, 0) + 1;
+            if (status != 403 && status != 410 && attempt <= 2 && !m_inFlight.value(url, false)) {
+                m_attempts.insert(url, attempt);
+                qDebug() << "Retrying cover download (" << attempt << "):" << url;
+                load(url); // re-enters the normal cache/in-flight path
+            } else {
+                m_attempts.remove(url);
+                qWarning() << "Cover download failed:" << url << reply->errorString();
+            }
             return;
         }
+        m_attempts.remove(url);
         QByteArray data = reply->readAll();
         QPixmap pm = ImageUtil::loadPixmapFromData(data);
         if (pm.isNull()) {
