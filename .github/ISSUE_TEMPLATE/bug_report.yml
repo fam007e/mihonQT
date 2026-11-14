@@ -1,0 +1,105 @@
+name: Bug report
+description: Report something that is broken or behaves incorrectly
+labels: [bug, triage]
+type: Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please fill in every field — reports
+        with missing environment details usually cannot be reproduced and
+        will be closed after a period of inactivity.
+        For build problems, check [Building](https://github.com/fam007e/mihonQT/wiki/Building) first.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, starting from launching the app.
+      placeholder: |
+        1. Open Library
+        2. Click '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MihonQT version
+      description: The release tag or commit the bug was found on
+      placeholder: v0.1.0-alpha
+    validations:
+      required: true
+
+  - type: input
+    id: qt-version
+    attributes:
+      label: Qt version
+      description: Output of `qmake6 --version` (or the bundled Qt if using a release build)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Reader
+        - Library
+        - Manga details / chapter list
+        - Browse / extensions
+        - Downloads
+        - Settings / theming
+        - Build system
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or console output
+      description: Any stderr output, JS console lines or screenshots. Paste inside code fences.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for a duplicate
+          required: true
+        - label: I am running a supported Qt 6 version
+          required: true
+        - label: This happens with the latest release or main branch
+          required: true
