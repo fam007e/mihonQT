@@ -25,10 +25,10 @@ public:
     QString baseUrl() const override;
     bool supportsLatest() const override;
 
-    // Browse related
-    QList<Manga> getPopularManga() override;
-    QList<Manga> getLatestUpdates() override;
-    QList<Manga> getSearchManga(const QString& query) override;
+    // Browse related (page is ignored: the local library is a single page)
+    QList<Manga> getPopularManga(int page) override;
+    QList<Manga> getLatestUpdates(int page) override;
+    QList<Manga> getSearchManga(const QString& query, int page) override;
 
     // Manga details related
     Manga getMangaDetails(const Manga& manga) override;

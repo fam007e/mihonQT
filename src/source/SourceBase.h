@@ -23,10 +23,11 @@ public:
     virtual QString baseUrl() const = 0;
     virtual bool supportsLatest() const = 0;
 
-    // Browse related
-    virtual QList<Manga> getPopularManga() = 0;
-    virtual QList<Manga> getLatestUpdates() = 0;
-    virtual QList<Manga> getSearchManga(const QString& query) = 0;
+    // Browse related (page is 1-based; implementations must support
+    // incremental paging so the browse view can load continuously)
+    virtual QList<Manga> getPopularManga(int page) = 0;
+    virtual QList<Manga> getLatestUpdates(int page) = 0;
+    virtual QList<Manga> getSearchManga(const QString& query, int page) = 0;
 
     // Manga details related
     virtual Manga getMangaDetails(const Manga& manga) = 0;

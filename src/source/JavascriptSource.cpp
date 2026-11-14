@@ -237,10 +237,12 @@ QJSValue JavascriptSource::callJsMethod(QJSEngine& engine, const QString& functi
     return result;
 }
 
-QList<Manga> JavascriptSource::getPopularManga()
+QList<Manga> JavascriptSource::getPopularManga(int page)
 {
     QJSEngine engine;
-    QJSValue jsResult = callJsMethod(engine, "getPopularManga");
+    QJSValueList args;
+    args << QJSValue(page);
+    QJSValue jsResult = callJsMethod(engine, "getPopularManga", args);
     // Extract ALL data from JS values before engine destructs
     QList<Manga> list = extractMangaList(jsResult, this->id());
     // Clear JS references before engine teardown
@@ -249,21 +251,23 @@ QList<Manga> JavascriptSource::getPopularManga()
     return list;
 }
 
-QList<Manga> JavascriptSource::getLatestUpdates()
+QList<Manga> JavascriptSource::getLatestUpdates(int page)
 {
     QJSEngine engine;
-    QJSValue jsResult = callJsMethod(engine, "getLatestUpdates");
+    QJSValueList args;
+    args << QJSValue(page);
+    QJSValue jsResult = callJsMethod(engine, "getLatestUpdates", args);
     QList<Manga> list = extractMangaList(jsResult, this->id());
     jsResult = QJSValue();
     engine.collectGarbage();
     return list;
 }
 
-QList<Manga> JavascriptSource::getSearchManga(const QString& query)
+QList<Manga> JavascriptSource::getSearchManga(const QString& query, int page)
 {
     QJSEngine engine;
     QJSValueList args;
-    args << QJSValue(query);
+    args << QJSValue(query) << QJSValue(page);
     QJSValue jsResult = callJsMethod(engine, "getSearchManga", args);
     QList<Manga> list = extractMangaList(jsResult, this->id());
     jsResult = QJSValue();

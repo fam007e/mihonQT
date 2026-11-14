@@ -92,6 +92,7 @@ void SourceBrowseView::setupUi()
     mainLayout->addWidget(m_mangaListView);
 
     connect(&m_watcher, &QFutureWatcher<QList<Manga>>::finished, this, &SourceBrowseView::onMangaFetchFinished);
+    connect(m_mangaListView, &MangaListView::bottomReached, this, &SourceBrowseView::requestNextPage);
 
     restyle();
 }
@@ -152,19 +153,8 @@ void SourceBrowseView::onSearchTriggered()
     m_popularBtn->setChecked(false);
     m_latestBtn->setChecked(false);
 
-    QString query = m_searchEdit->text();
-    m_progressBar->show();
-    m_statusLabel->setText(QString("Searching \"%1\"...").arg(query));
-    m_statusLabel->show();
-    m_mangaListView->hide();
-    m_popularBtn->setEnabled(false);
-    m_latestBtn->setEnabled(false);
-
-    SourceBase *src = m_source;
-    QFuture<QList<Manga>> future = QtConcurrent::run([src, query]() {
-        return src->getSearchManga(query);
-    });
-    m_watcher.setFuture(future);
+    m_currentQuery = m_searchEdit->text();
+    startFetch(Mode::Search, 1);
 }
 
 void SourceBrowseView::onPopularClicked()
@@ -174,18 +164,7 @@ void SourceBrowseView::onPopularClicked()
     m_popularBtn->setChecked(true);
     m_latestBtn->setChecked(false);
 
-    m_progressBar->show();
-    m_statusLabel->setText("Loading popular manga...");
-    m_statusLabel->show();
-    m_mangaListView->hide();
-    m_popularBtn->setEnabled(false);
-    m_latestBtn->setEnabled(false);
-
-    SourceBase *src = m_source;
-    QFuture<QList<Manga>> future = QtConcurrent::run([src]() {
-        return src->getPopularManga();
-    });
-    m_watcher.setFuture(future);
+    startFetch(Mode::Popular, 1);
 }
 
 void SourceBrowseView::onLatestClicked()
@@ -195,28 +174,85 @@ void SourceBrowseView::onLatestClicked()
     m_popularBtn->setChecked(false);
     m_latestBtn->setChecked(true);
 
-    m_progressBar->show();
-    m_statusLabel->setText("Loading latest updates...");
-    m_statusLabel->show();
-    m_mangaListView->hide();
-    m_popularBtn->setEnabled(false);
-    m_latestBtn->setEnabled(false);
+    startFetch(Mode::Latest, 1);
+}
+
+// Fetch one page of the current listing. Page 1 shows the full-screen
+// progress UI and replaces the grid; later pages append silently so the
+// listing loads continuously like the Android app.
+void SourceBrowseView::startFetch(Mode mode, int page)
+{
+    if (!m_source || m_watcher.isRunning()) return;
+
+    m_mode = mode;
+    m_currentPage = page;
+    m_fullScreenLoad = (page == 1);
+    if (page == 1) m_lastPageCount = -1; // fresh listing: clear the end marker
 
     SourceBase *src = m_source;
-    QFuture<QList<Manga>> future = QtConcurrent::run([src]() {
-        return src->getLatestUpdates();
-    });
+    QString query = m_currentQuery;
+    QFuture<QList<Manga>> future;
+    switch (mode) {
+    case Mode::Popular:
+        if (m_fullScreenLoad) m_statusLabel->setText("Loading popular manga...");
+        future = QtConcurrent::run([src, page]() {
+            return src->getPopularManga(page);
+        });
+        break;
+    case Mode::Latest:
+        if (m_fullScreenLoad) m_statusLabel->setText("Loading latest updates...");
+        future = QtConcurrent::run([src, page]() {
+            return src->getLatestUpdates(page);
+        });
+        break;
+    case Mode::Search:
+        if (m_fullScreenLoad) m_statusLabel->setText(QString("Searching \"%1\"...").arg(query));
+        future = QtConcurrent::run([src, query, page]() {
+            return src->getSearchManga(query, page);
+        });
+        break;
+    }
+
+    if (m_fullScreenLoad) {
+        m_progressBar->show();
+        m_statusLabel->show();
+        m_mangaListView->hide();
+        m_popularBtn->setEnabled(false);
+        m_latestBtn->setEnabled(false);
+    } else {
+        m_statusLabel->setText("Loading more...");
+        m_statusLabel->show();
+    }
+
     m_watcher.setFuture(future);
+}
+
+// Android-style continuous loading: fetch the next page when the grid is
+// scrolled near its bottom, until a page comes back empty.
+void SourceBrowseView::requestNextPage()
+{
+    if (!m_source || m_watcher.isRunning()) return;
+    if (m_lastPageCount == 0) return; // end of listing reached
+
+    startFetch(m_mode, m_currentPage + 1);
 }
 
 void SourceBrowseView::onMangaFetchFinished()
 {
-    m_progressBar->hide();
-    m_statusLabel->hide();
-    m_mangaListView->show();
-    m_popularBtn->setEnabled(true);
-    m_latestBtn->setEnabled(m_source ? m_source->supportsLatest() : true);
     QList<Manga> list = m_watcher.result();
-    qDebug() << "SourceBrowseView: Successfully loaded and populated" << list.size() << "manga items into grid view.";
-    m_mangaListView->populateManga(list);
+    m_lastPageCount = list.size();
+
+    if (m_fullScreenLoad) {
+        m_progressBar->hide();
+        m_statusLabel->hide();
+        m_mangaListView->show();
+        m_popularBtn->setEnabled(true);
+        m_latestBtn->setEnabled(m_source ? m_source->supportsLatest() : true);
+        qDebug() << "SourceBrowseView: Successfully loaded and populated" << list.size() << "manga items into grid view.";
+        m_mangaListView->populateManga(list);
+    } else {
+        m_statusLabel->hide();
+        m_mangaListView->appendManga(list);
+        qDebug() << "SourceBrowseView: Appended" << list.size() << "manga items (page" << m_currentPage << ").";
+    }
 }

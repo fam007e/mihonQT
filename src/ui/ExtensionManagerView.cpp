@@ -2,6 +2,7 @@
 #include "../source/ExtensionRepoManager.h"
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -129,16 +130,34 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     if (!version.isEmpty()) {
                         displayName += " (v" + version + ")";
                     }
-                    if (isTrusted) {
-                        displayName += " [Trusted]";
-                    }
 
-                    QListWidgetItem *item = new QListWidgetItem(displayName, m_availableList);
+                    // Row widget: name + inline trust toggle (double-click
+                    // elsewhere in the row still installs)
+                    QListWidgetItem *item = new QListWidgetItem(m_availableList);
                     item->setData(Qt::UserRole, pkg);
                     item->setData(Qt::UserRole + 1, downloadUrl);
+
+                    QWidget *row = new QWidget;
+                    QHBoxLayout *rowLayout = new QHBoxLayout(row);
+                    rowLayout->setContentsMargins(4, 2, 8, 2);
+                    rowLayout->setSpacing(8);
+                    QLabel *nameLabel = new QLabel(displayName, row);
                     if (isTrusted) {
-                        item->setForeground(QColor("#A3BE8C")); // Greenish for trusted
+                        nameLabel->setStyleSheet("color: #A3BE8C;"); // greenish for trusted
                     }
+                    QPushButton *trustBtn = new QPushButton(isTrusted ? "Untrust" : "Trust", row);
+                    trustBtn->setCursor(Qt::PointingHandCursor);
+                    trustBtn->setToolTip("Trusted extensions may fetch from hosts other than their site");
+                    const QString rowPkg = pkg;
+                    connect(trustBtn, &QPushButton::clicked, this, [this, rowPkg]() {
+                        bool trusted = ExtensionManager::instance().isTrusted(rowPkg);
+                        ExtensionManager::instance().setTrusted(rowPkg, !trusted);
+                        refreshAvailableExtensions();
+                    });
+                    rowLayout->addWidget(nameLabel, 1);
+                    rowLayout->addWidget(trustBtn);
+                    item->setSizeHint(QSize(0, row->sizeHint().height()));
+                    m_availableList->setItemWidget(item, row);
                 }
             }
             reply->deleteLater();

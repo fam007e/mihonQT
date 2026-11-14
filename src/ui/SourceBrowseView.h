@@ -35,6 +35,11 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
 
 private:
+    // Browse mode for the current listing; pages are 1-based
+    enum class Mode { Popular, Latest, Search };
+    void startFetch(Mode mode, int page);
+    void requestNextPage();
+
     void setupUi();
     void restyle();
 
@@ -48,6 +53,12 @@ private:
     QLabel *m_statusLabel;
     MangaListView *m_mangaListView;
     QFutureWatcher<QList<Manga>> m_watcher;
+
+    Mode m_mode = Mode::Popular;
+    QString m_currentQuery;
+    int m_currentPage = 1;
+    int m_lastPageCount = -1; // set to the fetched page's size; 0 stops paging
+    bool m_fullScreenLoad = false; // page-1 load: progress bar + disabled chips
 };
 
 #endif // SOURCEBROWSEVIEW_H

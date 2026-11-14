@@ -2,6 +2,7 @@
 #include "MangaCoverCard.h"
 #include <QVBoxLayout>
 #include <QResizeEvent>
+#include <QScrollBar>
 
 MangaListView::MangaListView(QWidget *parent)
     : QWidget(parent)
@@ -29,6 +30,15 @@ void MangaListView::setupUi()
 
     m_scrollArea->setWidget(m_contentWidget);
     mainLayout->addWidget(m_scrollArea);
+
+    // Continuous loading: notify the browse view when the grid is
+    // scrolled near its bottom edge
+    connect(m_scrollArea->verticalScrollBar(), &QScrollBar::valueChanged, this, [this](int value) {
+        QScrollBar *bar = m_scrollArea->verticalScrollBar();
+        if (bar->maximum() - value < 200) {
+            emit bottomReached();
+        }
+    });
 }
 
 void MangaListView::populateManga(const QList<Manga>& mangaList)
@@ -40,6 +50,19 @@ void MangaListView::populateManga(const QList<Manga>& mangaList)
     m_mangaList = mangaList;
 
     for (const Manga& manga : m_mangaList) {
+        MangaCoverCard *card = new MangaCoverCard(manga, 0, 0, QString(), m_contentWidget);
+        connect(card, &MangaCoverCard::clicked, this, &MangaListView::mangaSelected);
+        m_cards.append(card);
+    }
+
+    updateGridLayout();
+}
+
+void MangaListView::appendManga(const QList<Manga>& mangaList)
+{
+    m_mangaList.append(mangaList);
+
+    for (const Manga& manga : mangaList) {
         MangaCoverCard *card = new MangaCoverCard(manga, 0, 0, QString(), m_contentWidget);
         connect(card, &MangaCoverCard::clicked, this, &MangaListView::mangaSelected);
         m_cards.append(card);

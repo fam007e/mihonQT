@@ -23,9 +23,9 @@ public:
     QString baseUrl() const override;
     bool supportsLatest() const override;
 
-    QList<Manga> getPopularManga() override;
-    QList<Manga> getLatestUpdates() override;
-    QList<Manga> getSearchManga(const QString& query) override;
+    QList<Manga> getPopularManga(int page) override;
+    QList<Manga> getLatestUpdates(int page) override;
+    QList<Manga> getSearchManga(const QString& query, int page) override;
     Manga getMangaDetails(const Manga& manga) override;
     QList<SChapter> getChapterList(const Manga& manga) override;
     QList<QString> getPageList(const Chapter& chapter) override;
