@@ -7,6 +7,7 @@
 #include "reader/ReaderWidget.h"
 #include <QDesktopServices>
 #include <QFileDialog>
+#include <QPainter>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QKeyEvent>
@@ -15,6 +16,20 @@
 #include <QSplitter>
 #include <QStandardPaths>
 #include <QUrl>
+
+// Recolor a template SVG icon (black fill) to the theme foreground color
+static QIcon aboutTintedIcon(const QString& path, const QColor& color)
+{
+    QPixmap src(path);
+    if (src.isNull()) return QIcon();
+    QPixmap tinted(src.size());
+    tinted.fill(color);
+    QPainter p(&tinted);
+    p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+    p.drawPixmap(0, 0, src);
+    p.end();
+    return QIcon(tinted);
+}
 
 SettingsView::SettingsView(QWidget *parent) : QWidget(parent) {
   qDebug() << "SettingsView constructor start";
@@ -154,6 +169,13 @@ void SettingsView::updateThemeColors() {
     aboutFooter->setStyleSheet(QStringLiteral(
         "font-size: 11px; color: %1; background: transparent; padding-bottom: 16px;")
         .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.8f)));
+  }
+
+  // Re-tint the About link icons to the new theme
+  for (QPushButton *btn : findChildren<QPushButton *>()) {
+    const QString res = btn->property("iconResource").toString();
+    if (!res.isEmpty())
+      btn->setIcon(aboutTintedIcon(res, c.onSurface));
   }
 }
 
@@ -905,8 +927,7 @@ void SettingsView::createAdvancedPage() {
   m_contentStack->addWidget(page);
 }
 
-void SettingsView::createAboutPage() {
-  QWidget *page = new QWidget(this);
+void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
   QVBoxLayout *layout = new QVBoxLayout(page);
   layout->setAlignment(Qt::AlignCenter);
   layout->setSpacing(20);
@@ -956,72 +977,49 @@ void SettingsView::createAboutPage() {
 
   layout->addSpacing(10);
 
-  // ---- Link sections: rows that open the browser ----
+  // ---- Links: circular hyperlinked icons that open the browser ----
   const M3Colors &ac = ThemeManager::instance().colors();
-  auto makeSectionLabel = [this, &layout, &ac](const QString &text) {
-    QLabel *l = new QLabel(text, this);
-    l->setStyleSheet(QStringLiteral(
-        "font-size: 12px; font-weight: 600; letter-spacing: 1px; "
-        "color: %1; background: transparent;")
-        .arg(ThemeManager::rgba(ac.onSurfaceVariant, 0.9f)));
-    l->setAlignment(Qt::AlignHCenter);
-    layout->addWidget(l);
-  };
 
-  auto makeLinkRow = [this, &layout, &ac](const QString &title,
-                                     const QString &subtitle,
+  auto makeLinkIcon = [this, &layout, &ac](const QString &name,
+                                     const QString &iconResource,
                                      const QString &url) {
-    QPushButton *row = new QPushButton(this);
-    row->setCursor(Qt::PointingHandCursor);
-    row->setFixedHeight(56);
-    row->setMaximumWidth(520);
-    row->setToolTip(url);
-    row->setText(QString("%1\n%2").arg(title, subtitle));
-    row->setStyleSheet(
-        QStringLiteral(
-        "QPushButton { text-align: left; padding: 8px 18px; border-radius: 12px;"
-        "  background-color: %1; border: 1px solid %2; color: %3; font-size: 13px; }"
-        "QPushButton:hover { background-color: %4; border-color: %5; }")
-        .arg(ThemeManager::rgba(ac.onSurface, 0.04f), ac.outlineVariant.name(),
-             ac.onSurface.name(), ThemeManager::rgba(ac.onSurface, 0.09f),
-             ac.primary.name()));
-    row->connect(row, &QPushButton::clicked, this, [url]() {
+    QPushButton *btn = new QPushButton(this);
+    btn->setObjectName("aboutLinkIcon");
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setFixedSize(52, 52);
+    btn->setToolTip(QStringLiteral("%1 — %2").arg(name, url));
+    btn->setProperty("linkUrl", url);
+    btn->setProperty("iconResource", iconResource);
+    // Circular button; icon tinted to the theme in updateThemeColors()
+    btn->setIcon(aboutTintedIcon(iconResource, ac.onSurface));
+    btn->setIconSize(QSize(24, 24));
+    btn->setStyleSheet(QStringLiteral(
+        "QPushButton { border: none; border-radius: 26px; background: transparent; }"
+        "QPushButton:hover { background-color: %1; }")
+        .arg(ThemeManager::rgba(ac.onSurface, 0.10f)));
+    btn->connect(btn, &QPushButton::clicked, this, [url]() {
       QDesktopServices::openUrl(QUrl(url));
     });
-    QHBoxLayout *center = new QHBoxLayout();
-    center->addStretch();
-    center->addWidget(row);
-    center->addStretch();
-    layout->addLayout(center);
+    layout->addWidget(btn, 0, Qt::AlignCenter);
+    layout->addSpacing(6);
   };
 
-  makeSectionLabel("PROJECT");
-  makeLinkRow("GitHub repository",
-              "Source code, releases and build instructions",
-              "https://github.com/fam007e/mihonQT");
-  makeLinkRow("Website",
-              "Project homepage and news",
-              "https://fam007e.github.io/mihonQT/");
-  makeLinkRow("Wiki",
-              "Usage documentation and how-to pages",
-              "https://github.com/fam007e/mihonQT/wiki");
-  makeLinkRow("Documentation and FAQ",
-              "Setup guides and frequently asked questions",
-              "https://fam007e.github.io/mihonQT/FAQ.html");
-  makeLinkRow("Report an issue",
-              "Bug reports and feature requests on GitHub",
-              "https://github.com/fam007e/mihonQT/issues");
-
-  makeSectionLabel("COMMUNITY");
-  makeLinkRow("Discord",
-              "Chat with the MihonQT community",
-              "https://discord.gg/F34duNjTqn");
-  makeLinkRow("Upstream Mihon project",
-              "The Android app that MihonQT is modeled after",
-              "https://github.com/mihonapp/mihon");
-  makeLinkRow("Extensions source",
-              "Community source repositories for manga sites",
-              "https://github.com/keiyoushi/extensions-source");
+  makeLinkIcon("GitHub repository", ":/icons/github.svg",
+               "https://github.com/fam007e/mihonQT");
+  makeLinkIcon("Website", ":/icons/public.svg",
+               "https://fam007e.github.io/mihonQT/");
+  makeLinkIcon("Wiki", ":/icons/book.svg",
+               "https://github.com/fam007e/mihonQT/wiki");
+  makeLinkIcon("Documentation and FAQ", ":/icons/help.svg",
+               "https://fam007e.github.io/mihonQT/FAQ.html");
+  makeLinkIcon("Report an issue", ":/icons/bug.svg",
+               "https://github.com/fam007e/mihonQT/issues");
+  makeLinkIcon("Discord", ":/icons/discord.svg",
+               "https://discord.gg/F34duNjTqn");
+  makeLinkIcon("Upstream Mihon project", ":/icons/github.svg",
+               "https://github.com/mihonapp/mihon");
+  makeLinkIcon("Extensions source", ":/icons/extensions.svg",
+               "https://github.com/keiyoushi/extensions-source");
 
   layout->addStretch();
 
