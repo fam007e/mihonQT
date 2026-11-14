@@ -24,6 +24,12 @@ on:
       - 'resources.qrc'
       - '.github/workflows/memory_safety.yml'
 
+# Supersede in-flight runs on rapid pushes: the latest commit's analysis
+# is the only one that matters, and cancelling avoids runner pile-ups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-sanitize:
     runs-on: ubuntu-latest
