@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: MihonQT Discord
+    url: https://discord.gg/F34duNjTqn
+    about: Ask questions, get build help and chat with the community — please do not use issues for support.
+  - name: Documentation and FAQ
+    url: https://fam007e.github.io/mihonQT/FAQ.html
+    about: Setup guides and answers to the most common questions.
+  - name: GitHub Wiki
+    url: https://github.com/fam007e/mihonQT/wiki
+    about: Building, keyboard shortcuts, extension authoring and theming docs.

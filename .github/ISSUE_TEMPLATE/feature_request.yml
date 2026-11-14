@@ -1,0 +1,67 @@
+name: Feature request
+description: Suggest an idea or an improvement for MihonQT
+labels: [enhancement, triage]
+type: Feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature ideas are welcome. Before opening one, please check the
+        [Roadmap](https://github.com/fam007e/mihonQT/blob/main/ROADMAP.md) —
+        planned work is tracked there.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: What are you trying to do, and what currently makes it hard or impossible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should happen instead? Describe the behavior, not the implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you have tried or considered.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Reader
+        - Library
+        - Manga details / chapter list
+        - Browse / extensions
+        - Downloads
+        - Settings / theming
+        - Trackers / sync
+        - Build system / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: reference
+    attributes:
+      label: Mihon reference
+      description: MihonQT aims to mirror the Android app's behavior where sensible.
+      options:
+        - label: This feature exists in Mihon Android (link or describe the behavior)
+        - label: This is desktop-specific (mouse/keyboard/windowing)
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and the Roadmap for a duplicate
+          required: true

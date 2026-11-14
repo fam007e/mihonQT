@@ -6,6 +6,7 @@ First off, thank you for considering contributing to MihonQT! It's people like y
 
 ### Reporting Bugs
 
+- Use the **Bug report** issue template (it structures the description, reproduction steps, platform and version info).
 - Use a clear and descriptive title for the issue to identify the problem.
 - Describe the exact steps which reproduce the problem in as many details as possible.
 - Provide specific examples to demonstrate the steps.
@@ -14,6 +15,8 @@ First off, thank you for considering contributing to MihonQT! It's people like y
 
 ### Suggesting Enhancements
 
+- Use the **Feature request** issue template.
+- Check [ROADMAP.md](ROADMAP.md) first — planned work is tracked there.
 - Use a clear and descriptive title for the issue to identify the suggestion.
 - Provide a step-by-step description of the suggested enhancement in as many details as possible.
 - Provide specific examples to demonstrate the steps.
