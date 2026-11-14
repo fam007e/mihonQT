@@ -40,6 +40,9 @@ public:
     
     Q_INVOKABLE QJSValue get(const QString& url);
     Q_INVOKABLE QJSValue post(const QString& url, const QByteArray& data);
+    // Set a session cookie for the source's own domain (e.g. Madara sites'
+    // "toonily-mature=1" adult-content toggle, which is checked server-side).
+    Q_INVOKABLE bool setCookie(const QString& name, const QString& value);
 
     void setTrusted(bool trusted) { m_isTrusted = trusted; }
     void setAllowedBaseUrl(const QString& baseUrl) { m_allowedBaseUrl = baseUrl; }

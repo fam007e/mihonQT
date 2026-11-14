@@ -29,6 +29,7 @@ private slots:
     void onSearchTriggered();
     void onPopularClicked();
     void onLatestClicked();
+    void onOpenSiteWebView();
     void onMangaFetchFinished();
 
 protected:
@@ -49,6 +50,7 @@ private:
     QLineEdit *m_searchEdit;
     QPushButton *m_popularBtn;
     QPushButton *m_latestBtn;
+    QPushButton *m_siteWebViewBtn;
     QProgressBar *m_progressBar;
     QLabel *m_statusLabel;
     MangaListView *m_mangaListView;

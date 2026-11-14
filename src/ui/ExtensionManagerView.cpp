@@ -22,6 +22,11 @@ ExtensionManagerView::ExtensionManagerView(QWidget *parent)
 {
     setupUi();
     refreshAvailableExtensions();
+
+    // Re-render the list when anything installs/updates so the entry flips
+    // to "installed" (and clears a stale "update available") immediately.
+    connect(&ExtensionManager::instance(), &ExtensionManager::extensionInstalled,
+            this, &ExtensionManagerView::refreshAvailableExtensions);
 }
 
 void ExtensionManagerView::setupUi()
@@ -161,6 +166,7 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     QPushButton *trustBtn = new QPushButton(isTrusted ? "Untrust" : "Trust", row);
                     trustBtn->setCursor(Qt::PointingHandCursor);
                     trustBtn->setToolTip("Trusted extensions may fetch from hosts other than their site");
+                    trustBtn->setFixedWidth(92); // keep the row stable across Trust/Untrust text
                     const QString rowPkg = pkg;
                     connect(trustBtn, &QPushButton::clicked, this, [this, rowPkg]() {
                         bool trusted = ExtensionManager::instance().isTrusted(rowPkg);

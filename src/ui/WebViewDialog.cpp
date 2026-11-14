@@ -6,6 +6,7 @@
 
 WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     : QDialog(parent)
+    , m_url(url)
 {
     setWindowTitle("WebView - " + url);
     resize(1024, 768);
@@ -75,4 +76,15 @@ void WebViewDialog::onCookieAdded(const QNetworkCookie &cookie)
 QList<QNetworkCookie> WebViewDialog::getHarvestedCookies() const
 {
     return m_harvestedCookies;
+}
+
+void WebViewDialog::done(int result)
+{
+    // Seed the shared jar with everything harvested during the session, so
+    // manually opened WebViews (and challenge solves) carry their cookies
+    // into subsequent extension requests regardless of the caller.
+    if (!m_harvestedCookies.isEmpty() && !m_url.isEmpty()) {
+        NetworkAccessManager::sharedCookieJar()->setCookiesFromUrl(m_harvestedCookies, QUrl(m_url));
+    }
+    QDialog::done(result);
 }

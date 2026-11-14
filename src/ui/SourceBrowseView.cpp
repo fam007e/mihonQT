@@ -1,5 +1,6 @@
 #include "SourceBrowseView.h"
 #include "ThemeManager.h"
+#include "WebViewDialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMouseEvent>
@@ -65,9 +66,16 @@ void SourceBrowseView::setupUi()
     connect(m_popularBtn, &QPushButton::clicked, this, &SourceBrowseView::onPopularClicked);
     connect(m_latestBtn, &QPushButton::clicked, this, &SourceBrowseView::onLatestClicked);
 
+    m_siteWebViewBtn = new QPushButton("Open in WebView", this);
+    m_siteWebViewBtn->setCursor(Qt::PointingHandCursor);
+    m_siteWebViewBtn->setToolTip("Open the source's site in a WebView — solve bot challenges manually; "
+                                 "the cookies carry over to browsing");
+    connect(m_siteWebViewBtn, &QPushButton::clicked, this, &SourceBrowseView::onOpenSiteWebView);
+
     filterLayout->addWidget(m_popularBtn);
     filterLayout->addWidget(m_latestBtn);
     filterLayout->addStretch();
+    filterLayout->addWidget(m_siteWebViewBtn);
     searchLayout->addLayout(filterLayout);
 
     mainLayout->addWidget(searchBar);
@@ -235,6 +243,21 @@ void SourceBrowseView::requestNextPage()
     if (m_lastPageCount == 0) return; // end of listing reached
 
     startFetch(m_mode, m_currentPage + 1);
+}
+
+// Manual WebView session for the source's site: the user can solve bot
+// challenges at their own pace; harvested cookies seed the shared jar (see
+// WebViewDialog::done) and the current listing reloads with them.
+void SourceBrowseView::onOpenSiteWebView()
+{
+    if (!m_source) return;
+
+    WebViewDialog dialog(m_source->baseUrl(), this);
+    dialog.exec();
+
+    if (!m_watcher.isRunning()) {
+        startFetch(m_mode, 1); // refresh the listing with the new cookies
+    }
 }
 
 void SourceBrowseView::onMangaFetchFinished()

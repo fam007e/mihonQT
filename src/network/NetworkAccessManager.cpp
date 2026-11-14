@@ -54,6 +54,18 @@ NetworkAccessManager::~NetworkAccessManager()
     m_networkManager.setCookieJar(nullptr);
 }
 
+bool NetworkAccessManager::setCookie(const QString& name, const QString& value)
+{
+    if (m_allowedBaseUrl.isEmpty() || name.isEmpty()) return false;
+    QUrl base(m_allowedBaseUrl);
+    if (!base.isValid() || base.host().isEmpty()) return false;
+
+    QNetworkCookie cookie(name.toUtf8(), value.toUtf8());
+    cookie.setDomain("." + base.host());
+    cookie.setPath("/");
+    return sharedCookieJar()->setCookiesFromUrl(QList<QNetworkCookie>{cookie}, base);
+}
+
 void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
 {
     // Top-level Chrome navigation headers; sites behind CDNs/WAFs 403
@@ -86,13 +98,11 @@ void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
 
 static bool bodyLooksLikeChallenge(const QByteArray& body)
 {
-    // Challenge-page markers; used for 403/503 replies and, importantly,
-    // for HTTP 200 responses carrying an HTML interstitial.
-    return body.contains("Just a moment") ||
-           body.contains("Attention Required") ||
-           body.contains("cf-chl") ||
-           body.contains("challenge-platform") ||
-           body.contains("Verify you are human");
+    // For HTTP 200 responses: only actual interstitials. Broad markers like
+    // "challenge-platform" are injected by Cloudflare Bot Fight Mode into
+    // perfectly valid pages, so using them here would false-positive every
+    // request to protected sites.
+    return body.contains("Just a moment") || body.contains("Attention Required");
 }
 
 bool NetworkAccessManager::looksLikeChallenge(QNetworkReply* reply) const
@@ -104,8 +114,14 @@ bool NetworkAccessManager::looksLikeChallenge(QNetworkReply* reply) const
     // cf-mitigated: challenge is the canonical Cloudflare signal
     if (reply->rawHeader("cf-mitigated").toLower().contains("challenge")) return true;
 
-    // Body sniff for challenges that don't advertise themselves in headers
-    return bodyLooksLikeChallenge(reply->peek(65536));
+    // Body sniff for challenges that don't advertise themselves in headers;
+    // broad markers are safe here because a 403/503 is already a refusal
+    const QString body = QString::fromUtf8(reply->peek(65536));
+    return body.contains("Just a moment") ||
+           body.contains("Attention Required") ||
+           body.contains("cf-chl") ||
+           body.contains("challenge-platform") ||
+           body.contains("Verify you are human");
 }
 
 bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& url)
