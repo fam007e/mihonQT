@@ -19,18 +19,24 @@
 #include <QUrl>
 
 // Recolor a template SVG icon (black fill) to the theme foreground color
-static QIcon aboutTintedIcon(const QString& path, const QColor& color)
+// Recolor a template SVG icon (solid dark fill) to the theme foreground
+// color, preserving the glyph alpha channel exactly.
+static QIcon tintedIcon(const QString& path, const QColor& color)
 {
     QPixmap src(path);
     if (src.isNull()) return QIcon();
-    QPixmap tinted(src.size());
-    tinted.fill(color);
-    QPainter p(&tinted);
-    p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-    p.drawPixmap(0, 0, src);
-    p.end();
-    return QIcon(tinted);
+    QImage img = src.toImage().convertToFormat(QImage::Format_ARGB32);
+    for (int y = 0; y < img.height(); ++y) {
+        QRgb *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+        for (int x = 0; x < img.width(); ++x) {
+            const int alpha = qAlpha(line[x]);
+            line[x] = qRgba(color.red(), color.green(), color.blue(), alpha);
+        }
+    }
+    return QIcon(QPixmap::fromImage(img));
 }
+
+
 
 SettingsView::SettingsView(QWidget *parent) : QWidget(parent) {
   qDebug() << "SettingsView constructor start";
@@ -176,7 +182,7 @@ void SettingsView::updateThemeColors() {
   for (QPushButton *btn : findChildren<QPushButton *>()) {
     const QString res = btn->property("iconResource").toString();
     if (!res.isEmpty())
-      btn->setIcon(aboutTintedIcon(res, c.onSurface));
+      btn->setIcon(tintedIcon(res, c.onSurface));
   }
 }
 
@@ -1000,7 +1006,7 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
     btn->setProperty("linkUrl", url);
     btn->setProperty("iconResource", iconResource);
     // Circular button; icon tinted to the theme in updateThemeColors()
-    btn->setIcon(aboutTintedIcon(iconResource, ac.onSurface));
+    btn->setIcon(tintedIcon(iconResource, ac.onSurface));
     btn->setIconSize(QSize(24, 24));
     btn->setStyleSheet(QStringLiteral(
         "QPushButton { border: none; border-radius: 26px; background: transparent; }"
@@ -1029,7 +1035,7 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
   makeLinkIcon("Extensions source", ":/icons/extensions.svg",
                "https://github.com/keiyoushi/extensions-source");
 
-  layout->addWidget(iconRowHost, 0, Qt::AlignHCenter);
+  layout->addWidget(iconRowHost); // full width so the flow layout can re-wrap
   layout->addStretch();
 
   QLabel *footerLabel = new QLabel(

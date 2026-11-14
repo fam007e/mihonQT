@@ -8,13 +8,16 @@
 static QIcon tintedIcon(const QString& path, const QColor& color)
 {
     QPixmap src(path);
-    QPixmap tinted(src.size());
-    tinted.fill(color);
-    QPainter p(&tinted);
-    p.setCompositionMode(QPainter::CompositionMode_DestinationIn);
-    p.drawPixmap(0, 0, src);
-    p.end();
-    return QIcon(tinted);
+    if (src.isNull()) return QIcon();
+    QImage img = src.toImage().convertToFormat(QImage::Format_ARGB32);
+    for (int y = 0; y < img.height(); ++y) {
+        QRgb *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+        for (int x = 0; x < img.width(); ++x) {
+            const int alpha = qAlpha(line[x]);
+            line[x] = qRgba(color.red(), color.green(), color.blue(), alpha);
+        }
+    }
+    return QIcon(QPixmap::fromImage(img));
 }
 
 ReaderBarsOverlay::ReaderBarsOverlay(QWidget *parent)

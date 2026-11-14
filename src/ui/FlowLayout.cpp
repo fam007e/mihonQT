@@ -67,25 +67,42 @@ void FlowLayout::setGeometry(const QRect &rect)
 int FlowLayout::doLayout(const QRect &rect, bool testOnly) const
 {
     const QMargins margins = contentsMargins();
-    int x = rect.x() + margins.left();
-    int y = rect.y() + margins.top();
-    int lineHeight = 0;
+    const int availWidth = rect.width() - margins.left() - margins.right();
 
+    // First pass: greedily pack items into rows and measure each row
+    QList<QList<QLayoutItem*>> rows;
+    rows.append(QList<QLayoutItem*>());
+    QList<int> rowWidths, rowHeights;
+    int rowW = 0, rowH = 0;
     for (QLayoutItem *item : m_items) {
-        const QWidget *w = item->widget();
-        int spaceX = m_hSpace;
-        int spaceY = m_vSpace;
-        int nextX = x + item->sizeHint().width() + spaceX;
-        if (nextX - spaceX > rect.right() - margins.right() && lineHeight > 0) {
-            x = rect.x() + margins.left();
-            y = y + lineHeight + spaceY;
-            nextX = x + item->sizeHint().width() + spaceX;
-            lineHeight = 0;
+        const int itemW = item->sizeHint().width();
+        const int itemH = item->sizeHint().height();
+        const int nextW = rowW + (rowW ? m_hSpace : 0) + itemW;
+        if (nextW > availWidth && !rows.last().isEmpty()) {
+            rowWidths.append(rowW);
+            rowHeights.append(rowH);
+            rows.append(QList<QLayoutItem*>());
+            rowW = 0;
+            rowH = 0;
         }
-        if (!testOnly)
-            item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
-        x = nextX;
-        lineHeight = qMax(lineHeight, w ? w->height() : item->sizeHint().height());
+        rows.last().append(item);
+        rowW += itemW + (rowW ? m_hSpace : 0);
+        rowH = qMax(rowH, itemH);
     }
-    return y + lineHeight - rect.y() + margins.bottom();
+    rowWidths.append(rowW);
+    rowHeights.append(rowH);
+
+    // Second pass: place rows vertically, centering each row horizontally
+    int y = rect.y() + margins.top();
+    for (int r = 0; r < rows.size(); ++r) {
+        int x = rect.x() + margins.left()
+            + qMax(0, (availWidth - rowWidths[r]) / 2);
+        for (QLayoutItem *item : rows[r]) {
+            if (!testOnly)
+                item->setGeometry(QRect(QPoint(x, y), item->sizeHint()));
+            x += item->sizeHint().width() + m_hSpace;
+        }
+        y += rowHeights[r] + m_vSpace;
+    }
+    return y - m_vSpace - rect.y() + margins.bottom();
 }
