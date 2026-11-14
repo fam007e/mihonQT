@@ -36,7 +36,7 @@ All core logic and the main UI are implemented and functional. The first tagged 
 
 ## 🚧 Phase 4: Advanced Features & Deployment
 **Status: In Progress**
-- [x] Extension Repository System (external repo support)
+- [x] Extension Repository System (external repo support; default repo is the generated `repo-qt` branch of [fam007e/extensions-source](https://github.com/fam007e/extensions-source/tree/repo-qt) — JS sources + index.min.json built by CI, seeded with WeebCentral, Toonily, ManhuaUS, HiperDex, Webtoons.com, MangaDex)
 - [x] Statistics Dashboard
 - [x] Backup & Restore
 - [x] CI/CD Pipeline (Windows, Linux, macOS matrix)

@@ -11,13 +11,22 @@ MihonQT is built with Qt 6 and is designed to run on Linux, Windows, and macOS.
 ## Extensions
 
 ### How do I install extensions?
-Go to **More > Extensions**. You can add a repository URL (index.min.json) and browse available extensions to install them.
+Go to **More > Extensions**. The default repository is already configured — it
+serves JavaScript sources from the
+[`repo-qt` branch of fam007e/extensions-source](https://github.com/fam007e/extensions-source/tree/repo-qt)
+(WeebCentral, Toonily, ManhuaUS, HiperDex, Webtoons.com, MangaDex), and more
+sources are added over time. You can also add another repository URL (any URL
+serving an `index.min.json`) and browse available extensions to install them.
 
 ### Are extensions safe?
 Extensions in MihonQT run in a sandbox. To further protect users, we've implemented an **Extension Trust System**:
 - **Untrusted (Default):** Extensions are restricted to their source's domain and cannot perform cross-site requests.
 - **Trusted:** Users can explicitly "Trust" an extension in the Manager to remove these restrictions.
 - **Enforced HTTPS:** You can block all non-secure traffic from extensions in settings.
+
+Note: sources that load images or APIs from a different host than their site
+(e.g. **MangaDex**, **Webtoons.com**, **HiperDex**) must be marked **Trusted**
+before they can fetch anything.
 
 ### What is the user interface inspired by?
 MihonQT features a modern, Material 3-inspired design that closely matches the Tachiyomi/Mihon Android app experience, providing a familiar and premium feel for mobile users.
