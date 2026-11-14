@@ -511,7 +511,7 @@ void MangaDetailsView::refreshChapters()
 
     int read = 0, shown = 0;
     for (const Chapter& chapter : m_chapters) {
-        if (chapter.isRead()) ++read;
+        if (chapter.isRead()) ++read; // flawfinder: ignore ("read" substring, not libc read)
         // Apply the filter menu selection
         switch (m_chapterFilter) {
         case UnreadOnly:      if (chapter.isRead()) continue; break;
@@ -529,7 +529,7 @@ void MangaDetailsView::refreshChapters()
 
     if (m_chapterFilter == All)
         m_chaptersHeaderLabel->setText(
-            QStringLiteral("%1 chapters  ·  %2 read").arg(m_chapters.size()).arg(read));
+            QStringLiteral("%1 chapters  ·  %2 read").arg(m_chapters.size()).arg(read)); // flawfinder: ignore
     else
         m_chaptersHeaderLabel->setText(
             QStringLiteral("%1 of %2 chapters").arg(shown).arg(m_chapters.size()));
