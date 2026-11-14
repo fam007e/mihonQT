@@ -999,6 +999,12 @@ void SettingsView::createAboutPage() {
   makeLinkRow("GitHub repository",
               "Source code, releases and build instructions",
               "https://github.com/fam007e/mihonQT");
+  makeLinkRow("Website",
+              "Project homepage and news",
+              "https://fam007e.github.io/mihonQT/");
+  makeLinkRow("Wiki",
+              "Usage documentation and how-to pages",
+              "https://github.com/fam007e/mihonQT/wiki");
   makeLinkRow("Documentation and FAQ",
               "Setup guides and frequently asked questions",
               "https://fam007e.github.io/mihonQT/FAQ.html");
@@ -1007,9 +1013,9 @@ void SettingsView::createAboutPage() {
               "https://github.com/fam007e/mihonQT/issues");
 
   makeSectionLabel("COMMUNITY");
-  makeLinkRow("Mihon Discord",
-              "Chat with the Mihon and Tachiyomi community",
-              "https://discord.gg/mihon");
+  makeLinkRow("Discord",
+              "Chat with the MihonQT community",
+              "https://discord.gg/F34duNjTqn");
   makeLinkRow("Upstream Mihon project",
               "The Android app that MihonQT is modeled after",
               "https://github.com/mihonapp/mihon");
