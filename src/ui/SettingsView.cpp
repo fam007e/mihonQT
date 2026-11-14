@@ -1,5 +1,6 @@
 #include "SettingsView.h"
 #include "CategoryEditDialog.h"
+#include "FlowLayout.h"
 #include "ThemeManager.h"
 #include "UiUtils.h"
 #include "backup/BackupManager.h"
@@ -972,7 +973,9 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
       "Mihon experience, with JavaScript-based sources and a dual-page reader.",
       this);
   descLabel->setAlignment(Qt::AlignCenter);
+  descLabel->setWordWrap(true); // never truncate; reflows with window width
   descLabel->setObjectName("aboutDescLabel");
+  descLabel->setContentsMargins(24, 0, 24, 0);
   layout->addWidget(descLabel);
 
   layout->addSpacing(10);
@@ -980,7 +983,13 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
   // ---- Links: circular hyperlinked icons that open the browser ----
   const M3Colors &ac = ThemeManager::instance().colors();
 
-  auto makeLinkIcon = [this, &layout, &ac](const QString &name,
+  // Horizontal icon rows that re-flow on window resize
+  QWidget *iconRowHost = new QWidget(page);
+  iconRowHost->setStyleSheet("background: transparent;");
+  FlowLayout *iconFlow = new FlowLayout(iconRowHost, 10, 10);
+  iconRowHost->setLayout(iconFlow);
+
+  auto makeLinkIcon = [this, iconFlow, &ac](const QString &name,
                                      const QString &iconResource,
                                      const QString &url) {
     QPushButton *btn = new QPushButton(this);
@@ -1000,8 +1009,7 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
     btn->connect(btn, &QPushButton::clicked, this, [url]() {
       QDesktopServices::openUrl(QUrl(url));
     });
-    layout->addWidget(btn, 0, Qt::AlignCenter);
-    layout->addSpacing(6);
+    iconFlow->addWidget(btn);
   };
 
   makeLinkIcon("GitHub repository", ":/icons/github.svg",
@@ -1021,6 +1029,7 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
   makeLinkIcon("Extensions source", ":/icons/extensions.svg",
                "https://github.com/keiyoushi/extensions-source");
 
+  layout->addWidget(iconRowHost, 0, Qt::AlignHCenter);
   layout->addStretch();
 
   QLabel *footerLabel = new QLabel(

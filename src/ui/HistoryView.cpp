@@ -23,7 +23,8 @@ void HistoryView::setupUi()
     titleLabel->setStyleSheet("font-size: 18px; font-weight: bold;");
 
     m_clearAllBtn = new QPushButton("Clear All", this);
-    m_clearAllBtn->setFixedWidth(100);
+    // size to hint: a fixed width truncated the label with padding
+    m_clearAllBtn->setMinimumWidth(m_clearAllBtn->sizeHint().width() + 12);
     connect(m_clearAllBtn, &QPushButton::clicked, this, &HistoryView::onClearAllClicked);
 
     headerLayout->addWidget(titleLabel);
