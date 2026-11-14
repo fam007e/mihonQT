@@ -1,6 +1,7 @@
 #include "CoverCache.h"
 #include "ImageUtil.h"
 #include "../network/NetworkAccessManager.h"
+#include <QApplication>
 #include <QStandardPaths>
 #include <QDir>
 #include <QNetworkRequest>
@@ -16,6 +17,11 @@ CoverCache& CoverCache::instance()
 CoverCache::CoverCache(QObject *parent)
     : QObject(parent)
 {
+    // Share the app-wide cookie jar: session cookies established by sources
+    // (homepage visits, WebView challenge solves) must ride along on cover
+    // requests or hotlink-protected CDNs reply Forbidden.
+    m_nam.setCookieJar(NetworkAccessManager::sharedCookieJar());
+    NetworkAccessManager::sharedCookieJar()->setParent(qApp);
 }
 
 QString CoverCache::cacheDir() const
