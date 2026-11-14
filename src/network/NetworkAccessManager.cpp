@@ -8,6 +8,8 @@
 #include <QJsonArray>
 #include <QUrl>
 #include <QRegularExpression>
+#include <QHash>
+#include <QDateTime>
 #include "config/PreferenceManager.h"
 #include <QVariant>
 #include <QApplication>
@@ -107,6 +109,15 @@ bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& u
     // the same site should not stack modal dialogs on top of each other.
     static bool solving = false;
     if (solving) return false;
+
+    // Per-URL backoff: if a recent attempt for this URL produced no
+    // clearance cookie, fail the request instead of re-opening the dialog
+    // over and over while the user keeps browsing.
+    static QHash<QString, qint64> s_lastAttemptMs;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const qint64 last = s_lastAttemptMs.value(url, 0);
+    if (now - last < 30000) return false;
+    s_lastAttemptMs.insert(url, now);
 
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     qWarning() << "Bot challenge detected (" << statusCode << ") on" << url << "- opening WebView interceptor...";

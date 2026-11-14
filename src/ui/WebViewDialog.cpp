@@ -1,6 +1,8 @@
 #include "WebViewDialog.h"
 #include "../network/NetworkAccessManager.h"
+#include <QWebEngineCertificateError>
 #include <QRegularExpression>
+#include <QTimer>
 
 WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     : QDialog(parent)
@@ -11,19 +13,34 @@ WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    m_webView = new QWebEngineView(this);
-
-    QWebEngineProfile *profile = m_webView->page()->profile();
     // Keep the browser's NATIVE identity — spoofing a Chrome version the
     // embedded Chromium isn't makes Cloudflare see contradictory UA/client
     // hints and loop "Verifying you are human" forever. Instead, sync the
     // extension network layer to the browser's real UA (minus the
     // QtWebEngine token, which some CDNs flag), so the challenge is solved
     // with the same identity the requests later replay.
+    QWebEngineProfile *profile = m_page.profile();
     QString ua = profile->httpUserAgent();
     static const QRegularExpression qtToken("QtWebEngine/[\\d.]+\\s*;?\\s*");
     ua.remove(qtToken);
     NetworkAccessManager::setUserAgentOverride(ua);
+
+    m_webView = new QWebEngineView(this);
+    m_webView->setPage(&m_page);
+
+    // Some networks TLS-intercept the Cloudflare challenge backends, which
+    // would otherwise leave Turnstile unable to complete (endless 403).
+    // Accept overridable certificate errors here — and only here: this
+    // dialog exists purely so the user can solve a bot challenge.
+    connect(&m_page, &QWebEnginePage::certificateError, this,
+            [](const QWebEngineCertificateError &error) {
+                // the signal delivers a const ref; acceptCertificate() is
+                // non-const, so act on a copy (the documented pattern)
+                QWebEngineCertificateError copy = error;
+                if (copy.isOverridable()) {
+                    copy.acceptCertificate();
+                }
+            });
 
     QWebEngineCookieStore *cookieStore = profile->cookieStore();
     connect(cookieStore, &QWebEngineCookieStore::cookieAdded, this, &WebViewDialog::onCookieAdded);
@@ -39,7 +56,14 @@ WebViewDialog::~WebViewDialog()
 void WebViewDialog::onCookieAdded(const QNetworkCookie &cookie)
 {
     m_harvestedCookies.append(cookie);
-    // You could also emit a signal here for the NetworkManager to update universally
+
+    // Cloudflare sets cf_clearance once the challenge has been passed; that
+    // is the signal to hand control back to the request that was blocked.
+    // Close automatically instead of leaving the dialog open forever.
+    if (!m_cleared && cookie.name() == "cf_clearance") {
+        m_cleared = true;
+        QTimer::singleShot(500, this, &QDialog::accept);
+    }
 }
 
 QList<QNetworkCookie> WebViewDialog::getHarvestedCookies() const
