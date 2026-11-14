@@ -41,6 +41,66 @@ NetworkAccessManager::~NetworkAccessManager()
     m_networkManager.setCookieJar(nullptr);
 }
 
+void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
+{
+    // Top-level Chrome navigation headers; sites behind CDNs/WAFs 403
+    // requests that lack the client hints and fetch metadata a browser sends.
+    request.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+    request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
+    request.setRawHeader("Upgrade-Insecure-Requests", "1");
+    request.setRawHeader("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
+    request.setRawHeader("sec-ch-ua-mobile", "?0");
+    request.setRawHeader("sec-ch-ua-platform", "\"Windows\"");
+    request.setRawHeader("Sec-Fetch-Dest", "document");
+    request.setRawHeader("Sec-Fetch-Mode", "navigate");
+    request.setRawHeader("Sec-Fetch-Site", "none");
+    request.setRawHeader("Sec-Fetch-User", "?1");
+}
+
+bool NetworkAccessManager::looksLikeChallenge(QNetworkReply* reply) const
+{
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (statusCode != 403 && statusCode != 503) return false;
+
+    if (reply->rawHeader("Server").toLower().contains("cloudflare")) return true;
+    // cf-mitigated: challenge is the canonical Cloudflare signal
+    if (reply->rawHeader("cf-mitigated").toLower().contains("challenge")) return true;
+
+    // Body sniff for challenges that don't advertise themselves in headers
+    const QString body = QString::fromUtf8(reply->peek(65536));
+    return body.contains("Just a moment", Qt::CaseInsensitive) ||
+           body.contains("Attention Required", Qt::CaseInsensitive) ||
+           body.contains("cf-chl", Qt::CaseInsensitive) ||
+           body.contains("challenge-platform", Qt::CaseInsensitive);
+}
+
+bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& url)
+{
+    if (!looksLikeChallenge(reply)) return false;
+
+    const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    qWarning() << "Bot challenge detected (" << statusCode << ") on" << url << "- opening WebView interceptor...";
+
+    bool success = false;
+    auto showDialog = [url, &success]() {
+        WebViewDialog dialog(url);
+        dialog.exec();
+
+        QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
+        if (!cookies.isEmpty()) {
+            sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+            success = true;
+        }
+    };
+
+    if (QThread::currentThread() == qApp->thread()) {
+        showDialog();
+    } else {
+        QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
+    }
+    return success;
+}
+
 QJSValue NetworkAccessManager::get(const QString& url)
 {
     if (!isUrlAllowed(url)) {
@@ -52,6 +112,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    applyBrowserHeaders(request);
     QNetworkReply *reply = m_networkManager.get(request);
 
     QEventLoop loop;
@@ -77,32 +138,9 @@ QJSValue NetworkAccessManager::get(const QString& url)
             result = m_engine->toScriptValue(QString::fromUtf8(data));
         }
     } else {
-        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
-            qWarning() << "Cloudflare GET challenge detected! Opening WebView Interceptor...";
-            
-            bool success = false;
-            auto showDialog = [url, &success]() {
-                WebViewDialog dialog(url);
-                dialog.exec();
-                
-                QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
-                if (!cookies.isEmpty()) {
-                    sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
-                    success = true;
-                }
-            };
-
-            if (QThread::currentThread() == qApp->thread()) {
-                showDialog();
-            } else {
-                QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
-            }
-
-            if (success) {
-                reply->deleteLater();
-                return this->get(url); // Retry the request with the new cookies
-            }
+        if (solveChallenge(reply, url)) {
+            reply->deleteLater();
+            return this->get(url); // Retry the request with the new cookies
         }
 
         qWarning() << "Network GET request failed:" << reply->errorString();
@@ -129,6 +167,7 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    applyBrowserHeaders(request);
     QNetworkReply *reply = m_networkManager.post(request, data);
 
     QEventLoop loop;
@@ -152,30 +191,9 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
             result = m_engine->toScriptValue(QString::fromUtf8(responseData));
         }
     } else {
-        int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (statusCode == 503 && reply->rawHeader("Server").toLower().contains("cloudflare")) {
-            qWarning() << "Cloudflare POST challenge detected! Opening WebView Interceptor...";
-            bool success = false;
-            auto showDialog = [url, &success]() {
-                WebViewDialog dialog(url);
-                dialog.exec();
-                QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
-                if (!cookies.isEmpty()) {
-                    sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
-                    success = true;
-                }
-            };
-
-            if (QThread::currentThread() == qApp->thread()) {
-                showDialog();
-            } else {
-                QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
-            }
-
-            if (success) {
-                reply->deleteLater();
-                return this->post(url, data);
-            }
+        if (solveChallenge(reply, url)) {
+            reply->deleteLater();
+            return this->post(url, data);
         }
 
         qWarning() << "Network POST request failed:" << reply->errorString();

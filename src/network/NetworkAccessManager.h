@@ -57,6 +57,16 @@ private slots:
     void onReplyFinished(QNetworkReply* reply);
 
 private:
+    // Chrome-navigation header emulation (mirrors keiyoushi BrowserHeaders):
+    // many CDNs/WAFs 403 bare non-browser requests before Cloudflare even
+    // issues a challenge.
+    void applyBrowserHeaders(QNetworkRequest& request) const;
+    // 403/503 responses that look like a bot challenge (Cloudflare headers
+    // or challenge markers in the body) open the WebView dialog.
+    bool looksLikeChallenge(QNetworkReply* reply) const;
+    bool solveChallenge(QNetworkReply* reply, const QString& url);
+
+private:
     QNetworkAccessManager m_networkManager;
     QJSEngine* m_engine;
     QString m_userAgent = browserUserAgent();
