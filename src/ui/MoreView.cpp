@@ -325,9 +325,18 @@ void MoreView::moveRowFocus(int delta)
     int current = -1;
     for (int i = 0; i < rows.size(); ++i)
         if (rows[i] == focus) { current = i; break; }
-    current = (current < 0 || current >= rows.size() - 1)
-        ? (delta < 0 ? rows.size() - 1 : 0)
-        : current + delta;
+
+    // Wrap with clamping — never produce an out-of-range index
+    // (Up on the first row used to compute -1 and segfault)
+    if (current < 0)
+        current = (delta < 0) ? rows.size() - 1 : 0;
+    else
+        current += delta;
+    if (current < 0)
+        current = rows.size() - 1;
+    if (current >= rows.size())
+        current = 0;
+
     rows[current]->setFocus();
     m_scrollArea->ensureWidgetVisible(rows[current]);
 }
