@@ -24,7 +24,8 @@ void MoreView::setupUi() {
   mainLayout->setSpacing(0);
 
   // Scroll Area to mimic mobile feel
-  QScrollArea *scrollArea = new QScrollArea(this);
+  m_scrollArea = new QScrollArea(this);
+  QScrollArea *scrollArea = m_scrollArea;
   scrollArea->setWidgetResizable(true);
   scrollArea->setFrameShape(QFrame::NoFrame);
   scrollArea->setStyleSheet("background-color: transparent;");
@@ -113,6 +114,7 @@ void MoreView::addActionItem(const QString &iconPath, const QString &title,
   QWidget *scrollContent = qobject_cast<QWidget *>(m_listLayout->parent());
   QPushButton *btn = new QPushButton(scrollContent);
   m_rowWidgets.append(btn);
+  btn->installEventFilter(this);
   const M3Colors &rc = ThemeManager::instance().colors();
   btn->setStyleSheet(
       QStringLiteral(
@@ -279,7 +281,55 @@ bool MoreView::eventFilter(QObject *watched, QEvent *event)
         }
         return false;
     }
+
+    // Intercept keys ON the focused row: rows live inside a QScrollArea whose
+    // key handler would otherwise eat Up/Down for scrolling before the events
+    // ever reach MoreView::keyPressEvent.
+    if (event->type() == QEvent::KeyPress) {
+        QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        switch (keyEvent->key()) {
+        case Qt::Key_Up:
+        case Qt::Key_Left:
+            moveRowFocus(-1);
+            keyEvent->accept();
+            return true;
+        case Qt::Key_Down:
+        case Qt::Key_Right:
+            moveRowFocus(+1);
+            keyEvent->accept();
+            return true;
+        case Qt::Key_Return:
+        case Qt::Key_Enter:
+        case Qt::Key_Space:
+            if (QWidget *row = qobject_cast<QWidget *>(watched)) {
+                if (auto *cb = row->findChild<QCheckBox *>()) {
+                    cb->toggle(); // toggle row
+                } else if (auto *btn = qobject_cast<QPushButton *>(row)) {
+                    btn->click(); // action row
+                }
+            }
+            keyEvent->accept();
+            return true;
+        default:
+            break;
+        }
+    }
     return QWidget::eventFilter(watched, event);
+}
+
+void MoreView::moveRowFocus(int delta)
+{
+    const QList<QWidget *> rows = focusableRows();
+    if (rows.isEmpty()) return;
+    QWidget *focus = focusWidget();
+    int current = -1;
+    for (int i = 0; i < rows.size(); ++i)
+        if (rows[i] == focus) { current = i; break; }
+    current = (current < 0 || current >= rows.size() - 1)
+        ? (delta < 0 ? rows.size() - 1 : 0)
+        : current + delta;
+    rows[current]->setFocus();
+    m_scrollArea->ensureWidgetVisible(rows[current]);
 }
 
 void MoreView::addSeparator() {

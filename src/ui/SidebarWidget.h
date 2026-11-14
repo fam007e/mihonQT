@@ -17,6 +17,8 @@ public:
 
 signals:
     void navigationRequested(int index); // 0: Library, 1: Updates, 2: History, 3: Browse, 4: More
+    void focusContentRequested();        // Right arrow: move focus into the current view
+    void backRequested();                // Left arrow: navigate back
 
 private:
     QVBoxLayout *m_layout;

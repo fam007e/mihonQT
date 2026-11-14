@@ -24,6 +24,7 @@
 #include "ui/CategoryEditDialog.h"
 
 #include <QMenuBar>
+#include <QShortcut>
 #include <QMessageBox>
 #include <QDesktopServices>
 #include <QUrl>
@@ -313,6 +314,15 @@ void MainWindow::setupUi()
 
     // Global keyboard: Esc navigates back (see eventFilter)
     qApp->installEventFilter(this);
+
+    // Rail → content (Right arrow) and Ctrl+Q quit
+    connect(m_sidebar, &SidebarWidget::focusContentRequested, this, [this]() {
+        focusFirstWidget(m_contentStack->currentWidget());
+    });
+    connect(m_sidebar, &SidebarWidget::backRequested, this, &MainWindow::onBackRequested);
+
+    auto *quitShortcut = new QShortcut(QKeySequence("Ctrl+Q"), this);
+    connect(quitShortcut, &QShortcut::activated, this, &QWidget::close);
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)

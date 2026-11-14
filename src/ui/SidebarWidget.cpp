@@ -83,15 +83,22 @@ void SidebarWidget::keyPressEvent(QKeyEvent *event)
 
     switch (event->key()) {
     case Qt::Key_Up:
-    case Qt::Key_Left:
         idx = (idx - 1 + buttons.size()) % buttons.size();
         buttons[idx]->setFocus();
         event->accept();
         return;
     case Qt::Key_Down:
-    case Qt::Key_Right:
         idx = (idx + 1) % buttons.size();
         buttons[idx]->setFocus();
+        event->accept();
+        return;
+    case Qt::Key_Right:
+        // Enter the current section's content (view's first row/widget)
+        emit focusContentRequested();
+        event->accept();
+        return;
+    case Qt::Key_Left:
+        emit backRequested();
         event->accept();
         return;
     case Qt::Key_Return:

@@ -50,6 +50,10 @@ jobs:
       - name: Windows - Setup vcpkg
         if: matrix.os == 'windows-latest'
         run: |
+          # The pre-installed clone is shallow/old and cannot resolve manifest
+          # baselines newer than itself; fetch master first.
+          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch origin master
+          git -C "$env:VCPKG_INSTALLATION_ROOT" pull origin master
           vcpkg integrate install
 
       - name: Windows - Setup vcpkg binary cache

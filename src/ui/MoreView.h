@@ -41,6 +41,8 @@ protected:
 private:
     void setupUi();
     QList<QWidget*> focusableRows() const;
+    void moveRowFocus(int delta);
+    QScrollArea *m_scrollArea = nullptr;
     void addActionItem(const QString& icon, const QString& title, const QString& subtitle, const std::function<void()>& callback);
     QCheckBox* addToggleItem(const QString& icon, const QString& title, const QString& subtitle, bool initialValue, const std::function<void(bool)>& callback);
     void addSeparator();

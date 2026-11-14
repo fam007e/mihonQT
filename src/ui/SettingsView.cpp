@@ -145,6 +145,16 @@ void SettingsView::updateThemeColors() {
         "font-size: 14px; color: %1; background: transparent;")
         .arg(c.onSurfaceVariant.name()));
   }
+  if (QLabel *aboutDesc = findChild<QLabel *>("aboutDescLabel")) {
+    aboutDesc->setStyleSheet(QStringLiteral(
+        "font-size: 14px; color: %1; background: transparent; margin: 8px 24px;")
+        .arg(c.onSurfaceVariant.name()));
+  }
+  if (QLabel *aboutFooter = findChild<QLabel *>("aboutFooterLabel")) {
+    aboutFooter->setStyleSheet(QStringLiteral(
+        "font-size: 11px; color: %1; background: transparent; padding-bottom: 16px;")
+        .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.8f)));
+  }
 }
 
 void SettingsView::keyPressEvent(QKeyEvent *event) {
@@ -927,57 +937,93 @@ void SettingsView::createAboutPage() {
   // Info
   QLabel *titleLabel = new QLabel("MihonQT", this);
   titleLabel->setObjectName("aboutTitleLabel");
+  titleLabel->setAlignment(Qt::AlignCenter);
   layout->addWidget(titleLabel);
 
   QLabel *versionLabel = new QLabel("Version 0.1.0-alpha", this);
   versionLabel->setObjectName("aboutVersionLabel");
+  versionLabel->setAlignment(Qt::AlignCenter);
   layout->addWidget(versionLabel);
 
-  QLabel *descLabel =
-      new QLabel("A powerful, cross-platform manga reader for desktop.<br>"
-                 "Inspired by the beloved Mihon and Tachiyomi projects.<br>"
-                 "<br>"
-                 "Built with C++, Qt 6, and ❤️.",
-                 this);
+  QLabel *descLabel = new QLabel(
+      "A native desktop manga reader for Linux, Windows and macOS.<br>"
+      "Built with C++ and Qt 6 as an independent, cross-platform port of the "
+      "Mihon experience, with JavaScript-based sources and a dual-page reader.",
+      this);
   descLabel->setAlignment(Qt::AlignCenter);
-  descLabel->setStyleSheet("font-size: 14px; color: #ECEFF4; margin: 20px;");
+  descLabel->setObjectName("aboutDescLabel");
   layout->addWidget(descLabel);
 
-  // Links
-  QHBoxLayout *linksLayout = new QHBoxLayout();
-  linksLayout->setAlignment(Qt::AlignCenter);
-  linksLayout->setSpacing(15);
+  layout->addSpacing(10);
 
-  auto createLink = [this](const QString &text, const QString &url) {
-    QPushButton *btn = new QPushButton(text, this);
-    btn->setCursor(Qt::PointingHandCursor);
-    btn->setStyleSheet("QPushButton { "
-                       "   background-color: #4C566A; "
-                       "   color: #ECEFF4; "
-                       "   border: none; "
-                       "   padding: 8px 16px; "
-                       "   border-radius: 4px; "
-                       "}"
-                       "QPushButton:hover { background-color: #5E81AC; }");
-    connect(btn, &QPushButton::clicked,
-            [url]() { QDesktopServices::openUrl(QUrl(url)); });
-    return btn;
+  // ---- Link sections: rows that open the browser ----
+  const M3Colors &ac = ThemeManager::instance().colors();
+  auto makeSectionLabel = [this, &layout, &ac](const QString &text) {
+    QLabel *l = new QLabel(text, this);
+    l->setStyleSheet(QStringLiteral(
+        "font-size: 12px; font-weight: 600; letter-spacing: 1px; "
+        "color: %1; background: transparent;")
+        .arg(ThemeManager::rgba(ac.onSurfaceVariant, 0.9f)));
+    l->setAlignment(Qt::AlignHCenter);
+    layout->addWidget(l);
   };
 
-  linksLayout->addWidget(
-      createLink("GitHub", "https://github.com/fam007e/mihonQT"));
-  linksLayout->addWidget(
-      createLink("Website", "https://fam007e.github.io/mihonQT/"));
-  linksLayout->addWidget(
-      createLink("FAQ", "https://fam007e.github.io/mihonQT/FAQ.html"));
-  layout->addLayout(linksLayout);
+  auto makeLinkRow = [this, &layout, &ac](const QString &title,
+                                     const QString &subtitle,
+                                     const QString &url) {
+    QPushButton *row = new QPushButton(this);
+    row->setCursor(Qt::PointingHandCursor);
+    row->setFixedHeight(56);
+    row->setMaximumWidth(520);
+    row->setToolTip(url);
+    row->setText(QString("%1\n%2").arg(title, subtitle));
+    row->setStyleSheet(
+        QStringLiteral(
+        "QPushButton { text-align: left; padding: 8px 18px; border-radius: 12px;"
+        "  background-color: %1; border: 1px solid %2; color: %3; font-size: 13px; }"
+        "QPushButton:hover { background-color: %4; border-color: %5; }")
+        .arg(ThemeManager::rgba(ac.onSurface, 0.04f), ac.outlineVariant.name(),
+             ac.onSurface.name(), ThemeManager::rgba(ac.onSurface, 0.09f),
+             ac.primary.name()));
+    row->connect(row, &QPushButton::clicked, this, [url]() {
+      QDesktopServices::openUrl(QUrl(url));
+    });
+    QHBoxLayout *center = new QHBoxLayout();
+    center->addStretch();
+    center->addWidget(row);
+    center->addStretch();
+    layout->addLayout(center);
+  };
+
+  makeSectionLabel("PROJECT");
+  makeLinkRow("GitHub repository",
+              "Source code, releases and build instructions",
+              "https://github.com/fam007e/mihonQT");
+  makeLinkRow("Documentation and FAQ",
+              "Setup guides and frequently asked questions",
+              "https://fam007e.github.io/mihonQT/FAQ.html");
+  makeLinkRow("Report an issue",
+              "Bug reports and feature requests on GitHub",
+              "https://github.com/fam007e/mihonQT/issues");
+
+  makeSectionLabel("COMMUNITY");
+  makeLinkRow("Mihon Discord",
+              "Chat with the Mihon and Tachiyomi community",
+              "https://discord.gg/mihon");
+  makeLinkRow("Upstream Mihon project",
+              "The Android app that MihonQT is modeled after",
+              "https://github.com/mihonapp/mihon");
+  makeLinkRow("Extensions source",
+              "Community source repositories for manga sites",
+              "https://github.com/keiyoushi/extensions-source");
 
   layout->addStretch();
 
-  QLabel *footerLabel =
-      new QLabel("© 2025 MihonQT Contributors. Licensed under AGPLv3.", this);
-  footerLabel->setStyleSheet(
-      "font-size: 11px; color: #4C566A; padding-bottom: 20px;");
+  QLabel *footerLabel = new QLabel(
+      "© 2025 MihonQT Contributors — AGPLv3. "
+      "Not affiliated with the Mihon or Tachiyomi projects.", this);
+  footerLabel->setObjectName("aboutFooterLabel");
+  footerLabel->setAlignment(Qt::AlignCenter);
   layout->addWidget(footerLabel);
 
   m_contentStack->addWidget(page);
