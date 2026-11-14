@@ -4,7 +4,8 @@
   "dependencies": [
     "zlib",
     "gumbo",
-    "libwebp"
+    "libwebp",
+    "pkgconf"
   ],
   "builtin-baseline": "414b5330a184ea5fbc6ca29f7960b189f6b0392f"
 }
