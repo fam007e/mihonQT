@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QUrl>
+#include <QRegularExpression>
 #include "config/PreferenceManager.h"
 #include <QVariant>
 #include <QApplication>
@@ -18,11 +19,21 @@ SharedCookieJar* NetworkAccessManager::sharedCookieJar()
     return s_jar;
 }
 
+// User-Agent override set from the WebEngine profile (see WebViewDialog);
+// empty until a challenge dialog has opened.
+static QString s_userAgentOverride;
+
 QString NetworkAccessManager::browserUserAgent()
 {
-    static const QString ua = QStringLiteral(
+    if (!s_userAgentOverride.isEmpty()) return s_userAgentOverride;
+    static const QString defaultUa = QStringLiteral(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-    return ua;
+    return defaultUa;
+}
+
+void NetworkAccessManager::setUserAgentOverride(const QString& ua)
+{
+    if (!ua.isEmpty()) s_userAgentOverride = ua;
 }
 
 NetworkAccessManager::NetworkAccessManager(QJSEngine* engine, QObject *parent) 
@@ -45,12 +56,26 @@ void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
 {
     // Top-level Chrome navigation headers; sites behind CDNs/WAFs 403
     // requests that lack the client hints and fetch metadata a browser sends.
+    // The client hints are derived from browserUserAgent() so they never
+    // contradict the UA (inconsistency is exactly what makes Cloudflare
+    // loop "Verifying you are human").
     request.setRawHeader("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
     request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
     request.setRawHeader("Upgrade-Insecure-Requests", "1");
-    request.setRawHeader("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
+
+    static const QRegularExpression chromeVerRe("Chrome/(\\d+)");
+    const QString ua = browserUserAgent();
+    int major = 120;
+    QRegularExpressionMatch m = chromeVerRe.match(ua);
+    if (m.hasMatch()) major = m.captured(1).toInt();
+    request.setRawHeader("sec-ch-ua",
+        QStringLiteral("\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"%1\", \"Google Chrome\";v=\"%1\"").arg(major).toUtf8());
     request.setRawHeader("sec-ch-ua-mobile", "?0");
-    request.setRawHeader("sec-ch-ua-platform", "\"Windows\"");
+    const char* platform = ua.contains("Windows NT") ? "Windows"
+        : (ua.contains("Mac OS X") || ua.contains("Macintosh")) ? "macOS"
+        : (ua.contains("Linux") || ua.contains("X11")) ? "Linux" : "Unknown";
+    request.setRawHeader("sec-ch-ua-platform", QStringLiteral("\"%1\"").arg(platform).toUtf8());
+
     request.setRawHeader("Sec-Fetch-Dest", "document");
     request.setRawHeader("Sec-Fetch-Mode", "navigate");
     request.setRawHeader("Sec-Fetch-Site", "none");
@@ -78,6 +103,11 @@ bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& u
 {
     if (!looksLikeChallenge(reply)) return false;
 
+    // Only one challenge dialog at a time — parallel source calls failing on
+    // the same site should not stack modal dialogs on top of each other.
+    static bool solving = false;
+    if (solving) return false;
+
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     qWarning() << "Bot challenge detected (" << statusCode << ") on" << url << "- opening WebView interceptor...";
 
@@ -93,11 +123,13 @@ bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& u
         }
     };
 
+    solving = true;
     if (QThread::currentThread() == qApp->thread()) {
         showDialog();
     } else {
         QMetaObject::invokeMethod(qApp, showDialog, Qt::BlockingQueuedConnection);
     }
+    solving = false;
     return success;
 }
 
@@ -111,7 +143,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
     }
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
-    request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    request.setHeader(QNetworkRequest::UserAgentHeader, browserUserAgent());
     applyBrowserHeaders(request);
     QNetworkReply *reply = m_networkManager.get(request);
 
@@ -166,7 +198,7 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
 
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    request.setHeader(QNetworkRequest::UserAgentHeader, m_userAgent);
+    request.setHeader(QNetworkRequest::UserAgentHeader, browserUserAgent());
     applyBrowserHeaders(request);
     QNetworkReply *reply = m_networkManager.post(request, data);
 

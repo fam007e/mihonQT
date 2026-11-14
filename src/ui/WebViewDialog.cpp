@@ -1,5 +1,6 @@
 #include "WebViewDialog.h"
 #include "../network/NetworkAccessManager.h"
+#include <QRegularExpression>
 
 WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     : QDialog(parent)
@@ -13,10 +14,16 @@ WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     m_webView = new QWebEngineView(this);
 
     QWebEngineProfile *profile = m_webView->page()->profile();
-    // Cloudflare binds cf_clearance to the User-Agent: the challenge must be
-    // solved with the exact UA the extension network layer later replays,
-    // otherwise the harvested cookies are rejected.
-    profile->setHttpUserAgent(NetworkAccessManager::browserUserAgent());
+    // Keep the browser's NATIVE identity — spoofing a Chrome version the
+    // embedded Chromium isn't makes Cloudflare see contradictory UA/client
+    // hints and loop "Verifying you are human" forever. Instead, sync the
+    // extension network layer to the browser's real UA (minus the
+    // QtWebEngine token, which some CDNs flag), so the challenge is solved
+    // with the same identity the requests later replay.
+    QString ua = profile->httpUserAgent();
+    static const QRegularExpression qtToken("QtWebEngine/[\\d.]+\\s*;?\\s*");
+    ua.remove(qtToken);
+    NetworkAccessManager::setUserAgentOverride(ua);
 
     QWebEngineCookieStore *cookieStore = profile->cookieStore();
     connect(cookieStore, &QWebEngineCookieStore::cookieAdded, this, &WebViewDialog::onCookieAdded);

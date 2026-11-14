@@ -47,7 +47,12 @@ public:
     static SharedCookieJar* sharedCookieJar();
     // The browser UA used for all extension network requests. The WebView
     // challenge dialog must use the SAME UA: Cloudflare binds cf_clearance
-    // to the User-Agent, so a mismatch makes harvested cookies worthless.
+    // to the User-Agent. The override is set from the WebEngine profile's
+    // native UA (with its QtWebEngine token stripped) so the browser and the
+    // network layer share one internally-consistent identity — spoofing a
+    // Chrome version the embedded Chromium isn't makes Cloudflare loop
+    // "Verifying you are human" forever.
+    static void setUserAgentOverride(const QString& ua);
     static QString browserUserAgent();
 
 signals:
@@ -59,7 +64,8 @@ private slots:
 private:
     // Chrome-navigation header emulation (mirrors keiyoushi BrowserHeaders):
     // many CDNs/WAFs 403 bare non-browser requests before Cloudflare even
-    // issues a challenge.
+    // issues a challenge. Client hints are derived from browserUserAgent()
+    // so they never contradict the UA.
     void applyBrowserHeaders(QNetworkRequest& request) const;
     // 403/503 responses that look like a bot challenge (Cloudflare headers
     // or challenge markers in the body) open the WebView dialog.
@@ -69,7 +75,6 @@ private:
 private:
     QNetworkAccessManager m_networkManager;
     QJSEngine* m_engine;
-    QString m_userAgent = browserUserAgent();
     bool m_isTrusted = true;
     QString m_allowedBaseUrl;
 
