@@ -46,6 +46,8 @@ private:
 
     Manga m_manga;
     QList<Chapter> m_chapters;
+    enum ChapterFilter { All, UnreadOnly, DownloadedOnly, BookmarkedOnly };
+    ChapterFilter m_chapterFilter = All;
 
     // Header widgets
     QLabel *m_coverLabel;

@@ -204,14 +204,14 @@ void LibraryView::applyFilters()
             continue;
 
         // Downloaded-only filter (chapter URL not starting with "http" = downloaded)
-        if (m_downloadedOnly) {
-            const QList<Chapter> chaps = chapterRepo.getChaptersByMangaId(manga.id());
-            bool hasDownloaded = false;
-            for (const auto& ch : chaps) {
-                if (!ch.url().startsWith("http")) { hasDownloaded = true; break; }
-            }
-            if (!hasDownloaded) continue;
+        const QList<Chapter> chaps = chapterRepo.getChaptersByMangaId(manga.id());
+        int downloadCount = 0;
+        for (const auto& ch : chaps) {
+            if (!ch.url().startsWith("http"))
+                ++downloadCount;
         }
+        if (m_downloadedOnly && downloadCount == 0)
+            continue;
 
         // Search filter
         if (!m_searchQuery.isEmpty() &&
@@ -219,7 +219,7 @@ void LibraryView::applyFilters()
             continue;
 
         QString langBadge = (manga.source() == 0) ? QStringLiteral("Local") : QString();
-        MangaCoverCard *card = new MangaCoverCard(manga, unread, 0, langBadge, m_contentWidget);
+        MangaCoverCard *card = new MangaCoverCard(manga, unread, downloadCount, langBadge, m_contentWidget);
         connect(card, &MangaCoverCard::clicked, this, &LibraryView::mangaSelected);
         m_cards.append(card);
     }

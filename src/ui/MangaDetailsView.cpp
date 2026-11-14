@@ -8,6 +8,7 @@
 #include "model/ChapterSort.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -351,6 +352,28 @@ void MangaDetailsView::setupUi()
     m_filterButton->setFlat(true);
     m_filterButton->setProperty("flatIcon", true);
     m_filterButton->setFixedSize(40, 40);
+    // Mihon-style chapter filter menu
+    QMenu *filterMenu = new QMenu(m_filterButton);
+    QAction *allAct = filterMenu->addAction("All chapters");
+    QAction *unreadAct = filterMenu->addAction("Unread");
+    QAction *dlAct = filterMenu->addAction("Downloaded");
+    QAction *bmAct = filterMenu->addAction("Bookmarked");
+    for (QAction *a : {allAct, unreadAct, dlAct, bmAct}) a->setCheckable(true);
+    allAct->setChecked(true);
+    auto setFilter = [this, allAct, unreadAct, dlAct, bmAct](ChapterFilter f) {
+        m_chapterFilter = f;
+        for (QAction *a : {allAct, unreadAct, dlAct, bmAct})
+            a->setChecked(a == allAct ? (f == All) : a == unreadAct ? (f == UnreadOnly)
+                                    : a == dlAct ? (f == DownloadedOnly) : (f == BookmarkedOnly));
+        refreshChapters();
+    };
+    connect(allAct, &QAction::triggered, this, [setFilter]() { setFilter(All); });
+    connect(unreadAct, &QAction::triggered, this, [setFilter]() { setFilter(UnreadOnly); });
+    connect(dlAct, &QAction::triggered, this, [setFilter]() { setFilter(DownloadedOnly); });
+    connect(bmAct, &QAction::triggered, this, [setFilter]() { setFilter(BookmarkedOnly); });
+    connect(m_filterButton, &QPushButton::clicked, this, [this, filterMenu]() {
+        filterMenu->popup(m_filterButton->mapToGlobal(QPoint(0, m_filterButton->height())));
+    });
     chLayout->addWidget(m_filterButton);
     contentLayout->addWidget(chapterHeader);
 
@@ -486,9 +509,17 @@ void MangaDetailsView::refreshChapters()
     auto comparator = getChapterComparator(m_manga, m_manga.sortDescending());
     std::sort(m_chapters.begin(), m_chapters.end(), comparator);
 
-    int read = 0;
+    int read = 0, shown = 0;
     for (const Chapter& chapter : m_chapters) {
         if (chapter.isRead()) ++read;
+        // Apply the filter menu selection
+        switch (m_chapterFilter) {
+        case UnreadOnly:      if (chapter.isRead()) continue; break;
+        case DownloadedOnly:  if (chapter.url().startsWith("http")) continue; break;
+        case BookmarkedOnly:  if (!chapter.bookmark()) continue; break;
+        case All:             break;
+        }
+        ++shown;
         ChapterRow *row = new ChapterRow(chapter, m_chapterListContainer);
         row->onClick = [this, row]() {
             emit chapterSelected(m_manga, row->chapter());
@@ -496,8 +527,12 @@ void MangaDetailsView::refreshChapters()
         m_chapterListLayout->addWidget(row);
     }
 
-    m_chaptersHeaderLabel->setText(
-        QStringLiteral("%1 chapters  ·  %2 read").arg(m_chapters.size()).arg(read));
+    if (m_chapterFilter == All)
+        m_chaptersHeaderLabel->setText(
+            QStringLiteral("%1 chapters  ·  %2 read").arg(m_chapters.size()).arg(read));
+    else
+        m_chaptersHeaderLabel->setText(
+            QStringLiteral("%1 of %2 chapters").arg(shown).arg(m_chapters.size()));
 }
 
 void MangaDetailsView::mousePressEvent(QMouseEvent *event)
