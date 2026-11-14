@@ -18,6 +18,10 @@
     <file alias="icons/extensions.svg">src/icons/extensions.svg</file>
     <file alias="icons/skip_next.svg">src/icons/skip_next.svg</file>
     <file alias="icons/skip_prev.svg">src/icons/skip_prev.svg</file>
+    <file alias="icons/github.svg">src/icons/github.svg</file>
+    <file alias="icons/discord.svg">src/icons/discord.svg</file>
+    <file alias="icons/book.svg">src/icons/book.svg</file>
+    <file alias="icons/bug.svg">src/icons/bug.svg</file>
     <file alias="icons/check.svg">src/icons/check.svg</file>
     <file alias="icons/toggle_off.svg">src/icons/toggle_off.svg</file>
     <file alias="icons/toggle_on.svg">src/icons/toggle_on.svg</file>

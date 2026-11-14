@@ -19,7 +19,10 @@ ExtensionManager& ExtensionManager::instance()
 ExtensionManager::ExtensionManager()
 {
     QSettings settings("MihonQT", "MihonQT");
-    m_repositories = settings.value("extensionRepositories", QStringList() << "https://raw.githubusercontent.com/keiyoushi/extensions/repo").toStringList();
+    // Default: the maintainer's extensions fork (repo branch hosts index.min.json).
+    // NOTE: upstream indexes list Android .apk packages; JS-format indexes
+    // (MihonQT-native) can be added via More > Extensions.
+    m_repositories = settings.value("extensionRepositories", QStringList() << "https://raw.githubusercontent.com/fam007e/extensions-source/repo").toStringList();
 }
 
 ExtensionManager::~ExtensionManager()
