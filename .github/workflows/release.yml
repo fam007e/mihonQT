@@ -70,12 +70,6 @@ jobs:
           path: C:\vcpkg-binary-cache
           key: vcpkg-bin-windows-x64-${{ hashFiles('vcpkg.json') }}
 
-      - name: Windows - Install dependencies
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          vcpkg install --triplet x64-windows gumbo libwebp
-
       - name: Windows - Build
         if: matrix.os == 'windows-latest'
         shell: pwsh
