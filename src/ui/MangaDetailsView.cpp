@@ -105,11 +105,11 @@ public:
         const bool read = m_chapter.isRead();
         m_titleLabel->setStyleSheet(QStringLiteral(
             "font-size: 14px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.38f) : c.onSurface.name()));
+            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f) : c.onSurface.name()));
         m_subLabel->setStyleSheet(QStringLiteral(
             "font-size: 12px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.38f)
-                      : ThemeManager::rgba(c.onSurfaceVariant, 0.76f)));
+            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f)
+                      : c.onSurfaceVariant.name()));
         m_unreadDot->setStyleSheet(read
             ? "background: transparent;"
             : QStringLiteral("background: %1; border-radius: 4px;").arg(c.primary.name()));
@@ -382,16 +382,16 @@ void MangaDetailsView::restyle()
         .arg(c.onBackground.name()));
     m_authorLabel->setStyleSheet(QStringLiteral(
         "font-size: 12px; color: %1; background: transparent;")
-        .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.86f)));
+        .arg(c.onSurfaceVariant.name()));
     m_statusLabel->setStyleSheet(QStringLiteral(
         "font-size: 12px; color: %1; background: transparent;")
-        .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.86f)));
+        .arg(c.onSurfaceVariant.name()));
     m_chapterCountLabel->setStyleSheet(QStringLiteral(
         "font-size: 12px; color: %1; background: transparent;")
-        .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.86f)));
+        .arg(c.onSurfaceVariant.name()));
     m_descriptionLabel->setStyleSheet(QStringLiteral(
         "font-size: 13px; color: %1; background: transparent;")
-        .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.86f)));
+        .arg(c.onSurfaceVariant.name()));
     m_chaptersHeaderLabel->setStyleSheet(QStringLiteral(
         "font-size: 14px; font-weight: 600; color: %1; background: transparent;")
         .arg(c.onBackground.name()));

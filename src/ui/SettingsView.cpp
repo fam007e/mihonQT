@@ -105,9 +105,10 @@ void SettingsView::updatePreferences() {
 }
 
 void SettingsView::updateThemeColors() {
-  QPalette p = QApplication::palette();
-  QString accentColor = p.color(QPalette::Highlight).name();
-  QString windowColor = p.color(QPalette::Window).name();
+  // M3 tokens (see MoreView::updateThemeColors)
+  const M3Colors &c = ThemeManager::instance().colors();
+  QString accentColor = c.secondaryContainer.name();
+  QString textColor = c.onSecondaryContainer.name();
 
   QWidget *logoCircle = findChild<QWidget *>("aboutLogoCircle");
   if (logoCircle) {
@@ -123,7 +124,7 @@ void SettingsView::updateThemeColors() {
     logoChar->setStyleSheet(
         QString("font-size: 61px; font-weight: bold; color: %1; background: "
                 "transparent; margin-bottom: -0px;")
-            .arg(windowColor));
+            .arg(textColor));
   }
 
   QLabel *logoBadge = findChild<QLabel *>("aboutLogoBadge");
@@ -131,7 +132,18 @@ void SettingsView::updateThemeColors() {
     logoBadge->setStyleSheet(
         QString("font-size: 14px; font-weight: 800; color: %1; background: "
                 "transparent; margin-top: -3px;")
-            .arg(windowColor));
+            .arg(textColor));
+  }
+
+  if (QLabel *aboutTitle = findChild<QLabel *>("aboutTitleLabel")) {
+    aboutTitle->setStyleSheet(QStringLiteral(
+        "font-size: 28px; font-weight: bold; color: %1; background: transparent;")
+        .arg(c.onBackground.name()));
+  }
+  if (QLabel *aboutVersion = findChild<QLabel *>("aboutVersionLabel")) {
+    aboutVersion->setStyleSheet(QStringLiteral(
+        "font-size: 14px; color: %1; background: transparent;")
+        .arg(c.onSurfaceVariant.name()));
   }
 }
 
@@ -914,12 +926,11 @@ void SettingsView::createAboutPage() {
 
   // Info
   QLabel *titleLabel = new QLabel("MihonQT", this);
-  titleLabel->setStyleSheet(
-      "font-size: 28px; font-weight: bold; color: #ECEFF4;");
+  titleLabel->setObjectName("aboutTitleLabel");
   layout->addWidget(titleLabel);
 
   QLabel *versionLabel = new QLabel("Version 0.1.0-alpha", this);
-  versionLabel->setStyleSheet("font-size: 14px; color: #D8DEE9;");
+  versionLabel->setObjectName("aboutVersionLabel");
   layout->addWidget(versionLabel);
 
   QLabel *descLabel =

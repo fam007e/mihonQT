@@ -237,9 +237,11 @@ void MoreView::updatePreferences() {
 }
 
 void MoreView::updateThemeColors() {
-  QPalette p = QApplication::palette();
-  QString accentColor = p.color(QPalette::Highlight).name();
-  QString windowColor = p.color(QPalette::Window).name();
+  // M3 tokens: circle = secondaryContainer, knock-out text = onSecondaryContainer
+  // (the old palette.Window text failed contrast on every theme).
+  const M3Colors &c = ThemeManager::instance().colors();
+  QString accentColor = c.secondaryContainer.name();
+  QString textColor = c.onSecondaryContainer.name();
 
   QWidget *logoCircle = findChild<QWidget *>("logoCircle");
   if (logoCircle) {
@@ -254,13 +256,13 @@ void MoreView::updateThemeColors() {
     m_logoLabel->setStyleSheet(
         QString("font-size: 61px; font-weight: bold; color: %1; background: "
                 "transparent; margin-bottom: 0px;")
-            .arg(windowColor));
+            .arg(textColor));
   }
 
   if (m_qtBadge) {
     m_qtBadge->setStyleSheet(
         QString("font-size: 14px; font-weight: 800; color: %1; background: "
                 "transparent; margin-top: -3px;")
-            .arg(windowColor));
+            .arg(textColor));
   }
 }
