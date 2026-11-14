@@ -20,6 +20,12 @@ WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     // QtWebEngine token, which some CDNs flag), so the challenge is solved
     // with the same identity the requests later replay.
     QWebEngineProfile *profile = m_page.profile();
+    // The challenge iframe must be able to persist its clearance state:
+    // force cookies persistent so Cloudflare's cf_clearance (and Turnstile's
+    // internal state) survive page reloads. Third-party storage partitioning
+    // is disabled process-wide in main.cpp.
+    profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
+
     QString ua = profile->httpUserAgent();
     static const QRegularExpression qtToken("QtWebEngine/[\\d.]+\\s*;?\\s*");
     ua.remove(qtToken);
