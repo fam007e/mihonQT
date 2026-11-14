@@ -84,6 +84,17 @@ void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
     request.setRawHeader("Sec-Fetch-User", "?1");
 }
 
+static bool bodyLooksLikeChallenge(const QByteArray& body)
+{
+    // Challenge-page markers; used for 403/503 replies and, importantly,
+    // for HTTP 200 responses carrying an HTML interstitial.
+    return body.contains("Just a moment") ||
+           body.contains("Attention Required") ||
+           body.contains("cf-chl") ||
+           body.contains("challenge-platform") ||
+           body.contains("Verify you are human");
+}
+
 bool NetworkAccessManager::looksLikeChallenge(QNetworkReply* reply) const
 {
     const int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -94,11 +105,7 @@ bool NetworkAccessManager::looksLikeChallenge(QNetworkReply* reply) const
     if (reply->rawHeader("cf-mitigated").toLower().contains("challenge")) return true;
 
     // Body sniff for challenges that don't advertise themselves in headers
-    const QString body = QString::fromUtf8(reply->peek(65536));
-    return body.contains("Just a moment", Qt::CaseInsensitive) ||
-           body.contains("Attention Required", Qt::CaseInsensitive) ||
-           body.contains("cf-chl", Qt::CaseInsensitive) ||
-           body.contains("challenge-platform", Qt::CaseInsensitive);
+    return bodyLooksLikeChallenge(reply->peek(65536));
 }
 
 bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& url)
@@ -170,6 +177,18 @@ QJSValue NetworkAccessManager::get(const QString& url)
     QJSValue result;
     if (reply->error() == QNetworkReply::NoError) {
         QByteArray data = reply->readAll();
+
+        // Cloudflare managed challenges can come back as HTTP 200 with an
+        // HTML interstitial (observed on api.mangadex.org) — treat those as
+        // challenges too, or JS sources just see 2 KB of doctype-html.
+        if (bodyLooksLikeChallenge(data)) {
+            qWarning() << "200 response carries a challenge page for" << url << "- opening WebView interceptor...";
+            if (solveChallenge(reply, url)) {
+                reply->deleteLater();
+                return this->get(url); // Retry with the harvested cookies
+            }
+        }
+
         // Try to parse as JSON, otherwise return as string
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
