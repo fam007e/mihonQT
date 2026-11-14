@@ -260,7 +260,7 @@ void MoreView::updateThemeColors() {
   if (m_qtBadge) {
     m_qtBadge->setStyleSheet(
         QString("font-size: 14px; font-weight: 800; color: %1; background: "
-                "transparent; margin-top: -5px;")
+                "transparent; margin-top: -3px;")
             .arg(windowColor));
   }
 }
