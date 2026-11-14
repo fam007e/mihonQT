@@ -409,6 +409,30 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
         m_webtoonLabels.append(label);
     }
 
+    // Mihon resume behaviour (when not explicitly jumping to an end):
+    // a partially read chapter opens at its saved page; a chapter read to
+    // the end continues straight into the next one.
+    if (!startAtEnd && pageUrls.size() > 0) {
+        const int saved = chapter.lastPageRead();
+        if (saved >= pageUrls.size() - 1) {
+            for (int i = 0; i < m_chapters.size(); ++i) {
+                if (m_chapters[i].id() == chapter.id()) {
+                    if (i + 1 < m_chapters.size()) {
+                        Chapter next = m_chapters[i + 1];
+                        qDebug() << "ReaderWidget: chapter already finished, continuing with:" << next.name();
+                        m_currentChapterId = next.id();
+                        loadAndDisplayPages(next, false);
+                        return;
+                    }
+                    break; // last chapter — stay on its final page
+                }
+            }
+        } else if (saved > 0) {
+            m_currentPageIndex = qMin(saved, pageUrls.size() - 1);
+            qDebug() << "ReaderWidget: resuming at page" << m_currentPageIndex + 1;
+        }
+    }
+
     if (startAtEnd && !m_loadedPages.isEmpty()) {
         int target = m_loadedPages.size() - 1;
         if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
