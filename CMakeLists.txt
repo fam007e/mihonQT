@@ -30,6 +30,8 @@ pkg_check_modules(GUMBO IMPORTED_TARGET REQUIRED gumbo)
 pkg_check_modules(WEBP IMPORTED_TARGET REQUIRED libwebp)
 
 # --- QuaZip ---
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static QuaZip" FORCE)
+set(QUAZIP_INSTALL OFF CACHE BOOL "Disable QuaZip install" FORCE)
 set(QUAZIP_QT_MAJOR_VERSION 6 CACHE STRING "Qt version to use (6 or 5)" FORCE)
 set(QUAZIP_ENABLE_QTEXTCODEC OFF CACHE BOOL "Enable use of QTextCodec" FORCE) # Disable QTextCodec
 add_subdirectory(libs/quazip)
@@ -94,6 +96,14 @@ add_executable(MihonQT
 target_link_libraries(MihonQT PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Concurrent Qt6::Quick Qt6::Qml Qt6::WebEngineWidgets Qt6::WebEngineCore QuaZip::QuaZip PkgConfig::GUMBO PkgConfig::WEBP) # Link QuaZip, WebEngine, Gumbo and WebP
 
 # --- Deployment ---
+if(APPLE)
+    set_target_properties(MihonQT PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "MihonQT"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.mihonqt.app"
+    )
+endif()
+
 if(WIN32)
     include(cmake/WinDeploy.cmake)
     deploy_windows_dependencies(MihonQT USES_QT)
@@ -194,3 +204,43 @@ if(BUILD_FUZZERS)
     add_mihon_fuzzer(fuzz_image_util fuzz/fuzz_image_util.cpp src/util/ImageUtil.cpp)
     add_mihon_fuzzer(fuzz_chapter_sort fuzz/fuzz_chapter_sort.cpp src/model/Chapter.cpp src/model/Manga.cpp)
 endif()
+
+# --- Installation & CPack Packaging ---
+include(GNUInstallDirs)
+install(TARGETS MihonQT
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+if(UNIX AND NOT APPLE)
+    install(FILES resources/mihonqt.desktop
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
+    )
+    install(FILES docs/logo.png
+        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/256x256/apps
+        RENAME mihonqt.png
+    )
+endif()
+
+set(CPACK_PACKAGE_NAME "mihonqt")
+set(CPACK_PACKAGE_VENDOR "MihonQT Contributors")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Desktop manga reader built with C++ and Qt 6")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+
+# Debian / Ubuntu package settings (.deb)
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MihonQT Contributors <faisalmoshiur+mihonqt@gmail.com>")
+set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_FILE_NAME "MihonQT-linux-x86_64.deb")
+
+# RPM / Fedora package settings (.rpm)
+set(CPACK_RPM_PACKAGE_LICENSE "Apache-2.0")
+set(CPACK_RPM_PACKAGE_GROUP "Amusements/Graphics")
+set(CPACK_RPM_PACKAGE_AUTOREQ ON)
+set(CPACK_RPM_FILE_NAME "MihonQT-linux-x86_64.rpm")
+
+include(CPack)

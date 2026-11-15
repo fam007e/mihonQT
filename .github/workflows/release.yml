@@ -84,25 +84,106 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path build/Release/* -DestinationPath MihonQT-windows-${{ github.ref_name }}.zip
+          # Copy standalone binary
+          Copy-Item build/Release/MihonQT.exe -Destination MihonQT-windows-x64.exe
+
+          # Deploy Qt dependencies and plugins into release directory
+          if (Test-Path "$env:Qt6_DIR\bin\windeployqt.exe") {
+              & "$env:Qt6_DIR\bin\windeployqt.exe" --release --no-translations build/Release/MihonQT.exe
+          }
+
+          # Compress full portable archive with all DLLs and plugins
+          Compress-Archive -Path build/Release/* -DestinationPath MihonQT-windows-x64-${{ github.ref_name }}.zip
 
       # --- Ubuntu Setup ---
       - name: Ubuntu - Install dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libgumbo-dev libwebp-dev libquazip1-qt6-dev
+          sudo apt-get install -y build-essential cmake pkg-config qt6-base-dev qt6-webengine-dev qt6-declarative-dev qt6-5compat-dev libgumbo-dev libwebp-dev rpm zstd file wget dpkg-dev
 
       - name: Ubuntu - Build
         if: matrix.os == 'ubuntu-latest'
         run: |
           cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release
+          cmake --build build --config Release -j$(nproc)
 
       - name: Ubuntu - Package
         if: matrix.os == 'ubuntu-latest'
         run: |
-          mkdir release
+          # 1. Standalone Linux binary
+          cp build/MihonQT MihonQT-linux-x86_64
+          chmod +x MihonQT-linux-x86_64
+
+          # 2. Debian (.deb) and RedHat/Fedora (.rpm) via CPack
+          cpack --config build/CPackConfig.cmake -G DEB
+          cpack --config build/CPackConfig.cmake -G RPM
+          mv build/MihonQT-linux-*.deb . 2>/dev/null || true
+          mv build/MihonQT-linux-*.rpm . 2>/dev/null || true
+
+          # 3. Arch Linux (.pkg.tar.zst)
+          mkdir -p archpkg/usr/bin archpkg/usr/share/applications archpkg/usr/share/icons/hicolor/256x256/apps
+          cp build/MihonQT archpkg/usr/bin/
+          cp resources/mihonqt.desktop archpkg/usr/share/applications/
+          cp docs/logo.png archpkg/usr/share/icons/hicolor/256x256/apps/mihonqt.png
+          SIZE=$(du -sb archpkg/usr | awk '{print $1}')
+          DATE=$(date +%s)
+          PKGVER=$(echo "${{ github.ref_name }}" | sed 's/^v//' | tr '-' '_')
+          cat <<EOF > archpkg/.PKGINFO
+          pkgname = mihonqt
+          pkgbase = mihonqt
+          pkgver = ${PKGVER:-0.2.0}-1
+          pkgdesc = Desktop manga reader built with C++ and Qt 6
+          url = https://github.com/fam007e/mihonQT
+          builddate = $DATE
+          packager = MihonQT Contributors <faisalmoshiur+mihonqt@gmail.com>
+          size = $SIZE
+          arch = x86_64
+          license = Apache-2.0
+          depend = qt6-base
+          depend = qt6-webengine
+          depend = qt6-declarative
+          depend = qt6-5compat
+          depend = gumbo
+          depend = libwebp
+          EOF
+          (cd archpkg && tar -c --zstd -f ../MihonQT-linux-x86_64.pkg.tar.zst .PKGINFO usr)
+
+          # 4. Linux AppImage
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp build/MihonQT AppDir/usr/bin/
+          cp resources/mihonqt.desktop AppDir/
+          cp resources/mihonqt.desktop AppDir/usr/share/applications/
+          cp docs/logo.png AppDir/mihonqt.png
+          cp docs/logo.png AppDir/.DirIcon
+          cp docs/logo.png AppDir/usr/share/icons/hicolor/256x256/apps/mihonqt.png
+          cat <<'EOF' > AppDir/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          export PATH="${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+          export QT_PLUGIN_PATH="${HERE}/usr/plugins:${QT_PLUGIN_PATH}"
+          exec "${HERE}/usr/bin/MihonQT" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+          cp linuxdeploy-plugin-qt-x86_64.AppImage linuxdeploy-plugin-qt
+          export PATH="$PWD:$PATH"
+          export ARCH=x86_64
+          export QMAKE=/usr/lib/qt6/bin/qmake
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --appdir AppDir --plugin qt --output appimage || {
+              wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+              chmod +x appimagetool-x86_64.AppImage
+              ./appimagetool-x86_64.AppImage --appimage-extract-and-run AppDir MihonQT-linux-x86_64.AppImage
+          }
+          mv MihonQT*.AppImage MihonQT-linux-x86_64.AppImage 2>/dev/null || true
+          mv mihonqt*.AppImage MihonQT-linux-x86_64.AppImage 2>/dev/null || true
+
+          # 5. Standard tarball
+          mkdir -p release
           cp build/MihonQT release/
           tar -czvf MihonQT-linux-${{ github.ref_name }}.tar.gz -C release .
 
@@ -123,19 +204,42 @@ jobs:
       - name: macOS - Package
         if: matrix.os == 'macos-latest'
         run: |
-          if [ -d "build/MihonQT.app" ]; then
-            zip -r MihonQT-macos-${{ github.ref_name }}.zip build/MihonQT.app
+          APP_PATH="build/MihonQT.app"
+          if [ ! -d "$APP_PATH" ] && [ -d "build/Release/MihonQT.app" ]; then
+            APP_PATH="build/Release/MihonQT.app"
+          fi
+
+          if [ -d "$APP_PATH" ]; then
+            # Deploy Qt frameworks into app bundle
+            $(brew --prefix qt)/bin/macdeployqt "$APP_PATH" -no-strip || true
+
+            # Create drag-and-drop .dmg
+            mkdir -p dmg_root
+            cp -r "$APP_PATH" dmg_root/
+            ln -s /Applications dmg_root/Applications
+            hdiutil create -volname "MihonQT" -srcfolder dmg_root -ov -format UDZO MihonQT-macos-${{ github.ref_name }}.dmg
+
+            # Create zip archive of the .app
+            zip -r -y MihonQT-macos-${{ github.ref_name }}.zip "$APP_PATH"
           else
-            zip -j MihonQT-macos-${{ github.ref_name }}.zip build/MihonQT
+            zip -j MihonQT-macos-${{ github.ref_name }}.zip build/MihonQT build/Release/MihonQT 2>/dev/null || true
           fi
 
       # --- Create/Update Release ---
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Create / Update Release
+        uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: false
           files: |
-            MihonQT-windows-${{ github.ref_name }}.zip
-            MihonQT-linux-${{ github.ref_name }}.tar.gz
-            MihonQT-macos-${{ github.ref_name }}.zip
+            MihonQT-windows-x64.exe
+            MihonQT-windows-*.zip
+            MihonQT-linux-x86_64
+            MihonQT-linux-*.AppImage
+            MihonQT-linux-*.deb
+            MihonQT-linux-*.rpm
+            MihonQT-linux-*.pkg.tar.zst
+            MihonQT-linux-*.tar.gz
+            MihonQT-macos-*.dmg
+            MihonQT-macos-*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

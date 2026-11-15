@@ -1,4 +1,10 @@
-# CMake
+# Packaging artifacts
+_CPack_Packages/
+*.deb
+*.rpm
+*.pkg.tar.zst
+*.AppImage
+*.dmg
 build/
 build-fuzz/
 .mimosa/

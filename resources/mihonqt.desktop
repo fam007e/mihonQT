@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=MihonQT
+GenericName=Manga Reader
+Comment=Desktop manga reader built with C++ and Qt 6
+Exec=MihonQT %U
+Icon=mihonqt
+Terminal=false
+Categories=Graphics;Viewer;
+MimeType=application/x-cbz;application/x-cbr;
+Keywords=manga;reader;comic;tachiyomi;mihon;
+StartupWMClass=MihonQT

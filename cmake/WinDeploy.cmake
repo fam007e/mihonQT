@@ -17,7 +17,7 @@ function(deploy_windows_dependencies target)
             WINDEPLOYQT_EXECUTABLE windeployqt
             HINTS "${VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}/tools/Qt6/bin"
                   "${VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}/tools/qtbase/bin"
-            NO_DEFAULT_PATH
+                  "$ENV{Qt6_DIR}/bin"
         )
 
         if(NOT WINDEPLOYQT_EXECUTABLE)
