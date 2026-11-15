@@ -26,11 +26,14 @@ returns.
 
 ## Manga details
 
-| Key | Action |
+| Key / Mouse | Action |
 |---|---|
 | `Up` / `Down` | Walk the chapter list (auto-scrolls) |
 | `Enter` | Read the focused chapter |
-| `f` via filter button | All / Unread / Downloaded / Bookmarked chapters |
+| `f` via filter button | Filter All / Unread / Downloaded / Bookmarked chapters |
+| `Shift + Click` | Range select chapters between anchor and clicked row |
+| `Right-Click` | Open context menu (Mark Read/Unread, Mark Previous as Read, Download, Bookmark) |
+| `Esc` | Clear chapter selection mode / close tracking overlay / back |
 
 ## Reader
 

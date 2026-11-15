@@ -23,6 +23,8 @@
 #include <QTextDocumentFragment>
 #include <QRegularExpression>
 #include "WebViewDialog.h"
+#include "TrackingWidget.h"
+#include "../tracking/TrackerManager.h"
 
 // ------------------------------------------------------------------
 // Helpers
@@ -96,8 +98,8 @@ static QString relativeDate(long epochMs)
 }
 
 // One chapter row, matching Mihon's MangaChapterListItem:
-// [unread dot] Title            [download icon]
-//              date • scanlator
+// [checkbox] [unread dot] Title            [bookmark icon]
+//                         date • scanlator
 class ChapterRow : public QWidget
 {
 public:
@@ -109,13 +111,31 @@ public:
         col->setSpacing(5);
 
         QHBoxLayout *topRow = new QHBoxLayout();
-        topRow->setSpacing(6);
+        topRow->setSpacing(8);
+
+        m_checkBox = new QCheckBox(this);
+        m_checkBox->setVisible(false);
+        m_checkBox->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_checkBox->setFocusPolicy(Qt::NoFocus);
+        connect(m_checkBox, &QCheckBox::toggled, this, [this](bool checked) {
+            update();
+            if (onSelectionToggled) onSelectionToggled(checked);
+        });
+        topRow->addWidget(m_checkBox);
+
         m_unreadDot = new QLabel(this);
         m_unreadDot->setFixedSize(8, 8);
         m_titleLabel = new QLabel(this);
         m_titleLabel->setObjectName("chapterTitle");
         topRow->addWidget(m_unreadDot);
         topRow->addWidget(m_titleLabel, 1);
+
+        m_bookmarkBadge = new QLabel(this);
+        m_bookmarkBadge->setText("★");
+        m_bookmarkBadge->setStyleSheet("color: #EBCB8B; font-size: 14px; background: transparent;");
+        m_bookmarkBadge->setVisible(chapter.bookmark());
+        topRow->addWidget(m_bookmarkBadge);
+
         col->addLayout(topRow);
 
         QHBoxLayout *subRow = new QHBoxLayout();
@@ -139,35 +159,124 @@ public:
             sub << QStringLiteral("Page %1").arg(chapter.lastPageRead() + 1);
         m_subLabel->setText(sub.join("  •  "));
 
+        // Make labels pass mouse events through so clicks and right-clicks hit ChapterRow directly
+        m_titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_subLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_unreadDot->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_bookmarkBadge->setAttribute(Qt::WA_TransparentForMouseEvents);
+
         setCursor(Qt::PointingHandCursor);
         setFocusPolicy(Qt::StrongFocus); // keyboard: Up/Down moves, Enter opens
         restyle();
+    }
+
+    void setSelectionMode(bool mode)
+    {
+        m_selectionMode = mode;
+        m_checkBox->setVisible(mode);
+        if (!mode) {
+            m_checkBox->setChecked(false);
+        }
+        restyle();
+        update();
+    }
+
+    bool isSelected() const { return m_checkBox && m_checkBox->isChecked(); }
+    void setSelected(bool sel)
+    {
+        if (m_checkBox && m_checkBox->isChecked() != sel) {
+            m_checkBox->setChecked(sel);
+            update();
+        }
     }
 
     void restyle()
     {
         const M3Colors& c = ThemeManager::instance().colors();
         const bool read = m_chapter.isRead(); // flawfinder: ignore (identifier contains "read", not libc read)
+        // Mihon Android style: read chapters are dimmed (38% opacity)
         m_titleLabel->setStyleSheet(QStringLiteral(
-            "font-size: 14px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f) : c.onSurface.name())); // flawfinder: ignore
+            "font-size: 14px; background: transparent; color: %1; %2")
+            .arg(read ? ThemeManager::rgba(c.onSurface, 0.38f) : c.onSurface.name(),
+                 read ? "" : "font-weight: 500;"));
         m_subLabel->setStyleSheet(QStringLiteral(
             "font-size: 12px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.6f) // flawfinder: ignore
+            .arg(read ? ThemeManager::rgba(c.onSurface, 0.38f)
                       : c.onSurfaceVariant.name()));
-        m_unreadDot->setStyleSheet(read
-            ? "background: transparent;"
-            : QStringLiteral("background: %1; border-radius: 4px;").arg(c.primary.name()));
+        m_unreadDot->setVisible(!read && !m_selectionMode);
+        m_unreadDot->setStyleSheet(QStringLiteral("background: %1; border-radius: 4px;").arg(c.primary.name()));
+        if (m_bookmarkBadge) {
+            m_bookmarkBadge->setVisible(m_chapter.bookmark());
+        }
     }
 
     const Chapter& chapter() const { return m_chapter; }
     std::function<void()> onClick; // invoked on left click (avoids moc in .cpp)
+    std::function<void(ChapterRow*, bool)> onRowClickedInSelection;
+    std::function<void(bool)> onSelectionToggled;
+    std::function<void(const Chapter&)> onMarkRead;
+    std::function<void(const Chapter&)> onMarkUnread;
+    std::function<void(const Chapter&)> onMarkPreviousRead;
+    std::function<void(const Chapter&)> onToggleBookmark;
+    std::function<void()> onStartSelection;
 
 protected:
     void mousePressEvent(QMouseEvent *e) override
     {
-        if (e->button() == Qt::LeftButton && onClick) onClick();
+        if (e->button() == Qt::LeftButton) {
+            bool shift = (e->modifiers() & Qt::ShiftModifier);
+            if (m_selectionMode) {
+                if (onRowClickedInSelection) {
+                    onRowClickedInSelection(this, shift);
+                } else {
+                    setSelected(!isSelected());
+                }
+            } else if (onClick) {
+                onClick();
+            }
+            e->accept();
+            return;
+        } else if (e->button() == Qt::RightButton) {
+            e->accept();
+            return;
+        }
         QWidget::mousePressEvent(e);
+    }
+
+    void contextMenuEvent(QContextMenuEvent *e) override
+    {
+        e->accept();
+        QMenu menu(this);
+        if (m_chapter.isRead()) {
+            menu.addAction("Mark as unread", [this]() {
+                if (onMarkUnread) onMarkUnread(m_chapter);
+            });
+        } else {
+            menu.addAction("Mark as read", [this]() {
+                if (onMarkRead) onMarkRead(m_chapter);
+            });
+        }
+
+        menu.addAction("Mark previous chapters as read", [this]() {
+            if (onMarkPreviousRead) onMarkPreviousRead(m_chapter);
+        });
+
+        if (m_chapter.bookmark()) {
+            menu.addAction("Remove bookmark", [this]() {
+                if (onToggleBookmark) onToggleBookmark(m_chapter);
+            });
+        } else {
+            menu.addAction("Bookmark", [this]() {
+                if (onToggleBookmark) onToggleBookmark(m_chapter);
+            });
+        }
+
+        menu.addSeparator();
+        menu.addAction("Select multiple chapters", [this]() {
+            if (onStartSelection) onStartSelection();
+        });
+
+        menu.exec(e->globalPos());
     }
 
     void keyPressEvent(QKeyEvent *e) override
@@ -176,7 +285,11 @@ protected:
         case Qt::Key_Return:
         case Qt::Key_Enter:
         case Qt::Key_Space:
-            if (onClick) onClick();
+            if (m_selectionMode) {
+                m_checkBox->setChecked(!m_checkBox->isChecked());
+            } else if (onClick) {
+                onClick();
+            }
             e->accept();
             return;
         default:
@@ -187,8 +300,15 @@ protected:
     void paintEvent(QPaintEvent *e) override
     {
         QWidget::paintEvent(e);
-        // Focused-row highlight so keyboard navigation is visible
-        if (hasFocus()) {
+        if (m_selectionMode && isSelected()) {
+            QPainter p(this);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.fillRect(rect(), ThemeManager::rgba(ThemeManager::instance().colors().primary, 0.18f));
+            QPen pen(ThemeManager::instance().colors().primary);
+            pen.setWidthF(1.5);
+            p.setPen(pen);
+            p.drawRoundedRect(rect().adjusted(8, 2, -8, -2), 8, 8);
+        } else if (hasFocus()) {
             QPainter p(this);
             p.setRenderHint(QPainter::Antialiasing);
             QPen pen(ThemeManager::instance().colors().primary);
@@ -200,9 +320,12 @@ protected:
 
 private:
     Chapter m_chapter;
-    QLabel *m_unreadDot;
-    QLabel *m_titleLabel;
-    QLabel *m_subLabel;
+    bool m_selectionMode = false;
+    QCheckBox *m_checkBox = nullptr;
+    QLabel *m_unreadDot = nullptr;
+    QLabel *m_titleLabel = nullptr;
+    QLabel *m_subLabel = nullptr;
+    QLabel *m_bookmarkBadge = nullptr;
 };
 
 // ------------------------------------------------------------------
@@ -362,6 +485,24 @@ void MangaDetailsView::setupUi()
         }
     });
     actionsLayout->addWidget(m_categoriesButton);
+
+    m_trackingButton = new QPushButton(content);
+    m_trackingButton->setText("Tracking");
+    connect(m_trackingButton, &QPushButton::clicked, this, [this]() {
+        QDialog dialog(this);
+        dialog.setWindowTitle(QString("Tracking - %1").arg(m_manga.title()));
+        dialog.resize(520, 560);
+        QVBoxLayout *dlgLayout = new QVBoxLayout(&dialog);
+        dlgLayout->setContentsMargins(0, 0, 0, 0);
+
+        TrackingWidget *widget = new TrackingWidget(m_manga.id(), m_manga.title(), &dialog);
+        connect(widget, &TrackingWidget::closeRequested, &dialog, &QDialog::accept);
+        dlgLayout->addWidget(widget);
+
+        dialog.exec();
+    });
+    actionsLayout->addWidget(m_trackingButton);
+
     actionsLayout->addStretch();
     contentLayout->addLayout(actionsLayout);
 
@@ -413,6 +554,15 @@ void MangaDetailsView::setupUi()
     chLayout->addWidget(m_chaptersHeaderLabel);
     chLayout->addStretch();
 
+    m_selectButton = new QPushButton(chapterHeader);
+    m_selectButton->setText("Select");
+    m_selectButton->setFlat(true);
+    m_selectButton->setCursor(Qt::PointingHandCursor);
+    connect(m_selectButton, &QPushButton::clicked, this, [this]() {
+        setSelectionMode(!m_selectionMode);
+    });
+    chLayout->addWidget(m_selectButton);
+
     m_sortButton = new QPushButton(chapterHeader);
     m_sortButton->setFlat(true);
     m_sortButton->setProperty("flatIcon", true);
@@ -458,6 +608,57 @@ void MangaDetailsView::setupUi()
     });
     chLayout->addWidget(m_filterButton);
     contentLayout->addWidget(chapterHeader);
+
+    // Multi-chapter selection action bar
+    m_selectionBar = new QWidget(content);
+    m_selectionBar->setVisible(false);
+    QHBoxLayout *selLayout = new QHBoxLayout(m_selectionBar);
+    selLayout->setContentsMargins(20, 4, 12, 4);
+    selLayout->setSpacing(8);
+
+    m_selectionCountLabel = new QLabel("0 selected", m_selectionBar);
+    m_selectionCountLabel->setStyleSheet("font-weight: bold;");
+    selLayout->addWidget(m_selectionCountLabel);
+    selLayout->addStretch();
+
+    m_selectAllBtn = new QPushButton("Select All", m_selectionBar);
+    connect(m_selectAllBtn, &QPushButton::clicked, this, [this]() {
+        bool allSelected = true;
+        for (ChapterRow *row : chapterRows()) {
+            if (!row->isSelected()) { allSelected = false; break; }
+        }
+        for (ChapterRow *row : chapterRows()) {
+            row->setSelected(!allSelected);
+        }
+        updateSelectionCount();
+    });
+    selLayout->addWidget(m_selectAllBtn);
+
+    m_markReadBtn = new QPushButton("Mark as read", m_selectionBar);
+    connect(m_markReadBtn, &QPushButton::clicked, this, [this]() {
+        markSelectedAsRead(true);
+    });
+    selLayout->addWidget(m_markReadBtn);
+
+    m_markUnreadBtn = new QPushButton("Mark as unread", m_selectionBar);
+    connect(m_markUnreadBtn, &QPushButton::clicked, this, [this]() {
+        markSelectedAsRead(false);
+    });
+    selLayout->addWidget(m_markUnreadBtn);
+
+    m_bookmarkBtn = new QPushButton("Bookmark", m_selectionBar);
+    connect(m_bookmarkBtn, &QPushButton::clicked, this, [this]() {
+        bookmarkSelected();
+    });
+    selLayout->addWidget(m_bookmarkBtn);
+
+    m_cancelSelectBtn = new QPushButton("Done", m_selectionBar);
+    connect(m_cancelSelectBtn, &QPushButton::clicked, this, [this]() {
+        setSelectionMode(false);
+    });
+    selLayout->addWidget(m_cancelSelectBtn);
+
+    contentLayout->addWidget(m_selectionBar);
 
     // Chapter rows
     m_chapterListContainer = new QWidget(content);
@@ -511,6 +712,12 @@ void MangaDetailsView::restyle()
         .arg(c.outlineVariant.name(), c.onSurface.name(),
              ThemeManager::rgba(c.onSurface, 0.08f)));
     m_categoriesButton->setStyleSheet(QStringLiteral(
+        "QPushButton { border: 1px solid %1; border-radius: 22px; background: transparent;"
+        "  color: %2; padding: 10px 18px; font-weight: 500; }"
+        "QPushButton:hover { background: %3; }")
+        .arg(c.outlineVariant.name(), c.onSurface.name(),
+             ThemeManager::rgba(c.onSurface, 0.08f)));
+    m_trackingButton->setStyleSheet(QStringLiteral(
         "QPushButton { border: 1px solid %1; border-radius: 22px; background: transparent;"
         "  color: %2; padding: 10px 18px; font-weight: 500; }"
         "QPushButton:hover { background: %3; }")
@@ -663,8 +870,105 @@ void MangaDetailsView::refreshChapters()
         }
         ++shown;
         ChapterRow *row = new ChapterRow(chapter, m_chapterListContainer);
+        if (m_selectionMode) {
+            row->setSelectionMode(true);
+        }
         row->onClick = [this, row]() {
-            emit chapterSelected(m_manga, row->chapter());
+            if (m_selectionMode) {
+                row->setSelected(!row->isSelected());
+                updateSelectionCount();
+            } else {
+                emit chapterSelected(m_manga, row->chapter());
+            }
+        };
+        row->onRowClickedInSelection = [this](ChapterRow *targetRow, bool shift) {
+            const QList<ChapterRow*> allRows = chapterRows();
+            int currentIdx = allRows.indexOf(targetRow);
+            if (currentIdx < 0) return;
+
+            int anchorIdx = m_lastSelectedRowIndex;
+            if (anchorIdx < 0) {
+                for (int i = 0; i < allRows.size(); ++i) {
+                    if (allRows[i]->isSelected() && allRows[i] != targetRow) {
+                        anchorIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            if (shift && anchorIdx >= 0 && anchorIdx < allRows.size()) {
+                int start = qMin(anchorIdx, currentIdx);
+                int end = qMax(anchorIdx, currentIdx);
+                for (int i = start; i <= end; ++i) {
+                    allRows[i]->setSelected(true);
+                }
+            } else {
+                targetRow->setSelected(!targetRow->isSelected());
+                m_lastSelectedRowIndex = currentIdx;
+            }
+            updateSelectionCount();
+        };
+        row->onSelectionToggled = [this](bool) {
+            updateSelectionCount();
+        };
+        row->onMarkRead = [this](const Chapter& ch) {
+            Chapter copy = ch;
+            copy.setIsRead(true);
+            copy.setLastPageRead(0);
+            DatabaseManager::instance().chapterRepository().updateChapter(copy);
+            if (ch.chapterNumber() > 0) {
+                TrackerManager::instance().updateProgress(m_manga.id(), static_cast<int>(ch.chapterNumber()));
+            }
+            refreshChapters();
+        };
+        row->onMarkUnread = [this](const Chapter& ch) {
+            Chapter copy = ch;
+            copy.setIsRead(false);
+            DatabaseManager::instance().chapterRepository().updateChapter(copy);
+            refreshChapters();
+        };
+        row->onMarkPreviousRead = [this](const Chapter& target) {
+            ChapterRepository& repo = DatabaseManager::instance().chapterRepository();
+            // Take all chapters in reading order (ascending: Ch 1, 2, ... target)
+            QList<Chapter> ascending = m_chapters;
+            auto comp = getChapterComparator(m_manga, false); // ascending
+            std::sort(ascending.begin(), ascending.end(), comp);
+
+            int targetIdx = -1;
+            for (int i = 0; i < ascending.size(); ++i) {
+                if (ascending[i].id() == target.id()) {
+                    targetIdx = i;
+                    break;
+                }
+            }
+
+            int lastReadCh = 0;
+            // Strictly mark chapters PREVIOUS to target as read (i < targetIdx), leaving target unread
+            for (int i = 0; i < targetIdx && i < ascending.size(); ++i) {
+                Chapter ch = ascending[i];
+                ch.setIsRead(true);
+                ch.setLastPageRead(0);
+                repo.updateChapter(ch);
+                if (ch.chapterNumber() > lastReadCh) {
+                    lastReadCh = static_cast<int>(ch.chapterNumber());
+                }
+            }
+            if (lastReadCh > 0) {
+                TrackerManager::instance().updateProgress(m_manga.id(), lastReadCh);
+            }
+            refreshChapters();
+        };
+        row->onToggleBookmark = [this](const Chapter& ch) {
+            Chapter copy = ch;
+            copy.setBookmark(!copy.bookmark());
+            DatabaseManager::instance().chapterRepository().updateChapter(copy);
+            refreshChapters();
+        };
+        row->onStartSelection = [this, row]() {
+            setSelectionMode(true);
+            row->setSelected(true);
+            m_lastSelectedRowIndex = chapterRows().indexOf(row);
+            updateSelectionCount();
         };
         m_chapterListLayout->addWidget(row);
     }
@@ -677,13 +981,71 @@ void MangaDetailsView::refreshChapters()
             QStringLiteral("%1 of %2 chapters").arg(shown).arg(m_chapters.size()));
 }
 
+void MangaDetailsView::setSelectionMode(bool active)
+{
+    m_selectionMode = active;
+    m_lastSelectedRowIndex = -1;
+    m_selectionBar->setVisible(active);
+    m_selectButton->setText(active ? "Cancel" : "Select");
+    for (ChapterRow *row : chapterRows()) {
+        row->setSelectionMode(active);
+    }
+    updateSelectionCount();
+}
+
+void MangaDetailsView::updateSelectionCount()
+{
+    int count = 0;
+    for (ChapterRow *row : chapterRows()) {
+        if (row->isSelected()) ++count;
+    }
+    m_selectionCountLabel->setText(QString("%1 selected").arg(count));
+    m_markReadBtn->setEnabled(count > 0);
+    m_markUnreadBtn->setEnabled(count > 0);
+    m_bookmarkBtn->setEnabled(count > 0);
+}
+
+void MangaDetailsView::markSelectedAsRead(bool read)
+{
+    ChapterRepository& repo = DatabaseManager::instance().chapterRepository();
+    int maxCh = 0;
+    for (ChapterRow *row : chapterRows()) {
+        if (row->isSelected()) {
+            Chapter ch = row->chapter();
+            ch.setIsRead(read);
+            if (read) {
+                ch.setLastPageRead(0);
+                if (ch.chapterNumber() > maxCh) {
+                    maxCh = static_cast<int>(ch.chapterNumber());
+                }
+            }
+            repo.updateChapter(ch);
+        }
+    }
+    if (read && maxCh > 0) {
+        TrackerManager::instance().updateProgress(m_manga.id(), maxCh);
+    }
+    setSelectionMode(false);
+    refreshChapters();
+}
+
+void MangaDetailsView::bookmarkSelected()
+{
+    ChapterRepository& repo = DatabaseManager::instance().chapterRepository();
+    for (ChapterRow *row : chapterRows()) {
+        if (row->isSelected()) {
+            Chapter ch = row->chapter();
+            ch.setBookmark(!ch.bookmark());
+            repo.updateChapter(ch);
+        }
+    }
+    setSelectionMode(false);
+    refreshChapters();
+}
+
 void MangaDetailsView::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::RightButton) {
-        emit backRequested();
-    } else {
-        QWidget::mousePressEvent(event);
-    }
+    QWidget::mousePressEvent(event);
 }
 
 QList<ChapterRow *> MangaDetailsView::chapterRows() const
@@ -699,6 +1061,12 @@ QList<ChapterRow *> MangaDetailsView::chapterRows() const
 
 void MangaDetailsView::keyPressEvent(QKeyEvent *event)
 {
+    if (m_selectionMode && event->key() == Qt::Key_Escape) {
+        setSelectionMode(false);
+        event->accept();
+        return;
+    }
+
     const QList<ChapterRow*> rows = chapterRows();
     QWidget *focus = focusWidget();
     int current = -1;

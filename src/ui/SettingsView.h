@@ -106,6 +106,7 @@ private:
     QCheckBox *m_autoUpdateTrackersCheckBox;
     QPushButton *m_loginMalButton;
     QPushButton *m_loginAnilistButton;
+    QPushButton *m_loginMangaUpdatesButton;
 
     // Browse widgets
     QCheckBox *m_checkForSourceUpdatesCheckBox;

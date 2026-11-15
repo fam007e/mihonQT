@@ -32,7 +32,12 @@ cmake --build build -j$(nproc)
 - **Mihon Android theming** — the same Material 3 palettes, plus AMOLED
 - **Library management** — categories, unread/download badges, filters,
   download queue, reading history
-- **Trackers-ready** architecture and local-source (CBZ/folder) support
+- **Integrated Trackers** — native support for **AniList**, **MyAnimeList (MAL)**,
+  and **MangaUpdates (Baka-Updates)** with score rating, progress auto-sync, and
+  pre-filled chapter counts
+- **Batch Chapter Management** — <kbd>Shift</kbd> + Click range selection,
+  "Mark previous chapters as read", and bulk download/bookmarking
+- **Local-source support** — `.cbz` archives and folder image collections
 
 ## Links
 

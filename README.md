@@ -26,8 +26,14 @@ experience for Linux, Windows and macOS.
 
 ## ✨ Features
 
-- **📚 Library Management:** Categories, unread and download badges, filters
+- **📚 Library Management:** Categories, unread and download badges, filters,
   and reading-progress tracking.
+- **🔗 Tracking Services:** Full integration with **AniList**, **MyAnimeList**,
+  and **MangaUpdates**. Auto-syncs progress upon reading, supports ratings/scores,
+  reading status, and pre-fills progress from local history.
+- **⚡ Batch Chapter Management:** Multi-chapter selection (with Shift+Click range
+  selection), batch mark as read/unread, bookmarking, and one-click "Mark
+  previous chapters as read". Dimmed read chapter appearance matching Mihon MD3.
 - **🌐 JavaScript Extensions:** Manga sources as plain JS files with
   HTML5-correct parsing (Gumbo) and a full CSS selector engine, executed off
   the UI thread.

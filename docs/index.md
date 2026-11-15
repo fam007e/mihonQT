@@ -26,6 +26,8 @@ MihonQT aims to bring the best features of the Mihon Android app to the desktop,
 - **Material 3 Inspired UI:** A modern interface consistent with Tachiyomi/Mihon Android.
 - **Double-Page Spread Reader:** Cover offset, wide-page detection, RTL/LTR/vertical modes.
 - **Full Keyboard Navigation:** Rail-focused hub-and-spoke navigation with Esc/Enter/arrows.
+- **Tracking Services Integration:** Full OAuth sync for **AniList**, **MyAnimeList (MAL)**, and **MangaUpdates (Baka-Updates)** with automatic progress update, ratings (`★ 0.0 - 10.0`), and library pre-fill.
+- **Batch Chapter Management:** Range selection with <kbd>Shift</kbd> + Click, one-click "Mark previous chapters as read" (keeps target chapter unread so you can read it immediately), and bulk download/bookmarking.
 - **JavaScript Extensions:** HTML5-correct parsing (Gumbo) with CSS selectors, run off the UI thread.
 - **Dynamic Theming:** The Mihon Material 3 palettes (Mihon Default, Nord, Catppuccin, Tokyo Night, Dracula) plus AMOLED.
 - **Multi-threaded Download Manager:** Fast and robust chapter downloads for offline reading.

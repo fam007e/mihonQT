@@ -77,7 +77,9 @@ jobs:
           cmake -B build -S . `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
-            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR" `
+            -DANILIST_CLIENT_ID="${{ secrets.ANILIST_CLIENT_ID }}" `
+            -DMAL_CLIENT_ID="${{ secrets.MAL_CLIENT_ID }}"
           cmake --build build --config Release
 
       - name: Windows - Package
@@ -105,7 +107,10 @@ jobs:
       - name: Ubuntu - Build
         if: matrix.os == 'ubuntu-latest'
         run: |
-          cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANILIST_CLIENT_ID="${{ secrets.ANILIST_CLIENT_ID }}" \
+            -DMAL_CLIENT_ID="${{ secrets.MAL_CLIENT_ID }}"
           cmake --build build --config Release -j$(nproc)
 
       - name: Ubuntu - Package
@@ -132,7 +137,7 @@ jobs:
           cat <<EOF > archpkg/.PKGINFO
           pkgname = mihonqt
           pkgbase = mihonqt
-          pkgver = ${PKGVER:-0.2.0}-1
+          pkgver = ${PKGVER:-0.3.0}-1
           pkgdesc = Desktop manga reader built with C++ and Qt 6
           url = https://github.com/fam007e/mihonQT
           builddate = $DATE
@@ -198,7 +203,11 @@ jobs:
       - name: macOS - Build
         if: matrix.os == 'macos-latest'
         run: |
-          cmake -B build -S . -DCMAKE_PREFIX_PATH=$(brew --prefix qt) -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -S . \
+            -DCMAKE_PREFIX_PATH=$(brew --prefix qt) \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DANILIST_CLIENT_ID="${{ secrets.ANILIST_CLIENT_ID }}" \
+            -DMAL_CLIENT_ID="${{ secrets.MAL_CLIENT_ID }}"
           cmake --build build --config Release
 
       - name: macOS - Package

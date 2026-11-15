@@ -25,5 +25,8 @@
     <file alias="icons/check.svg">src/icons/check.svg</file>
     <file alias="icons/toggle_off.svg">src/icons/toggle_off.svg</file>
     <file alias="icons/toggle_on.svg">src/icons/toggle_on.svg</file>
+    <file alias="icons/anilist.svg">src/icons/anilist.svg</file>
+    <file alias="icons/myanimelist.svg">src/icons/myanimelist.svg</file>
+    <file alias="icons/mangaupdates.svg">src/icons/mangaupdates.svg</file>
 </qresource>
 </RCC>

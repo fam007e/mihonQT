@@ -31,6 +31,41 @@ before they can fetch anything.
 ### What is the user interface inspired by?
 MihonQT features a modern, Material 3-inspired design that closely matches the Tachiyomi/Mihon Android app experience, providing a familiar and premium feel for mobile users.
 
+## Tracking Services
+
+### Which tracking services are supported?
+MihonQT currently supports:
+- **AniList** (OAuth2 token authorization)
+- **MyAnimeList (MAL)** (OAuth2 PKCE authorization with localhost redirect)
+- **MangaUpdates (Baka-Updates)** (API token / user login)
+
+### How do I log in to MyAnimeList (MAL)?
+1. Go to **More > Settings > Tracking**.
+2. Click **Log in** next to MyAnimeList.
+3. If setting up your own MAL Client ID in MyAnimeList Developer settings, ensure the **App Redirect URL** is configured as `http://localhost`.
+4. Authorize MihonQT in your browser and complete the sign-in.
+
+### How does tracking progress synchronize?
+- **Automatic Chapter Sync:** When you finish reading a chapter in the reader or mark chapters as read in the manga details view, MihonQT automatically sends the updated chapter number to all bound trackers.
+- **Pre-filling Local Progress:** If a tracker entry currently has `0` chapters read, opening the tracking dialog automatically pre-fills your highest read chapter number from your local reading history.
+- **Score / Rating:** You can set a score from `0.0` to `10.0` (in `0.5` increments) in the tracking dialog and click **Update Progress** to submit your rating directly to the tracking platform.
+- **Auto-Search:** Opening the tracking dialog or switching tabs automatically searches the tracker using the current manga title.
+
+## Chapter Management
+
+### How do I select multiple chapters?
+1. Click the **Select** button in the chapter list header to enter selection mode.
+2. Click a chapter to select it.
+3. Hold <kbd>Shift</kbd> and click another chapter — all chapters between the two will be selected immediately.
+4. Use the action bar at the top to mark them as read/unread, download, or bookmark in batch.
+5. Press <kbd>Esc</kbd> or click the back arrow to exit selection mode.
+
+### How does "Mark previous chapters as read" work?
+Right-click any chapter in the list and choose **Mark previous chapters as read**.
+- MihonQT will mark all chapters *before* the chosen chapter as read in reading order (ascending).
+- The selected chapter itself remains **unread**, so you can start reading right from it without having to uncheck it.
+- Your connected trackers will automatically update to reflect the last read chapter.
+
 ## Reading
 
 ### What file formats are supported for local manga?

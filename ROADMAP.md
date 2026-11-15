@@ -1,6 +1,6 @@
 # Roadmap: Porting Mihon to Qt for Desktop (macOS, Linux, Windows)
 
-This document outlines the progress of porting Mihon to a cross-platform desktop application using Qt 6. Last updated: 2026-11-15, for the v0.2.0-alpha release.
+This document outlines the progress of porting Mihon to a cross-platform desktop application using Qt 6. Last updated: 2026-11-16, for the v0.3.0-alpha release.
 
 ## 🏁 Current Status: Alpha
 All core logic and the main UI are implemented and functional. Prebuilt binaries for Linux, Windows and macOS are published on GitHub Releases.
@@ -19,6 +19,7 @@ All core logic and the main UI are implemented and functional. Prebuilt binaries
 **Status: Completed**
 - [x] Library Screen (grid view with unread/download badges, category tabs, search and filters)
 - [x] Manga Details Screen (Mihon-style header, chapter rows, chapter filter menu, HTML synopsis cleaning)
+- [x] Multi-Chapter Selection & Management (batch mark as read/unread, bookmark, Shift+Click range selection, "Mark previous chapters as read")
 - [x] Improved Reader (tap zones, keyboard shortcuts, immediate focus)
 - [x] Double-Page Spread (cover offset, wide-page detection, dynamic stepping, hotkey toggle via W / Shift+D / Ctrl+D)
 - [x] Per-Manga Viewing Mode (manga-specific reading mode persistence)
@@ -44,10 +45,10 @@ All core logic and the main UI are implemented and functional. Prebuilt binaries
 - [x] Statistics Dashboard
 - [x] Backup & Restore
 - [x] CI/CD Pipeline (Windows, Linux, macOS matrix)
-- [x] Release Pipeline (tagged builds with per-platform artifacts — v0.1.0-alpha)
+- [x] Release Pipeline (tagged builds with per-platform artifacts — Linux standalone binary, AppImage, deb, rpm, pkg.tar.zst; Windows bundle zip; macOS dmg)
 - [x] Documentation & FAQ (site + wiki)
 - [x] Code Scanning (CodeQL, Flawfinder) and libFuzzer fuzzing
-- [ ] Tracking Services (AniList, MyAnimeList — service code exists, UI wiring pending)
+- [x] Tracking Services (AniList, MyAnimeList, MangaUpdates — OAuth2/PKCE auth, progress auto-sync, rating/score updates, and local pre-fill)
 - [ ] Full Internationalization (i18n)
 - [ ] Auto-Updater for Desktop
 - [ ] Reader color filters and custom brightness presets

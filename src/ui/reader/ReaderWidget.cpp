@@ -15,6 +15,7 @@
 #include "../../database/DatabaseManager.h"
 #include "../../config/PreferenceManager.h"
 #include "../../source/SourceManager.h" // Needed for SourceManager access
+#include "tracking/TrackerManager.h"
 
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -995,6 +996,10 @@ void ReaderWidget::saveReadingProgress()
             Chapter chapter = m_chapterRepo->getChapterById(m_currentChapterId);
             if (chapter.id() != -1) {
                 chapter.setLastPageRead(m_currentPageIndex);
+                if (!m_loadedPages.isEmpty() && m_currentPageIndex >= m_loadedPages.size() - 1) {
+                    chapter.setIsRead(true);
+                    TrackerManager::instance().updateProgress(m_currentManga.id(), static_cast<int>(chapter.chapterNumber()));
+                }
                 m_chapterRepo->updateChapter(chapter);
             }
         }

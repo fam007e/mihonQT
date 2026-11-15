@@ -7,6 +7,6 @@ Exec=MihonQT %U
 Icon=mihonqt
 Terminal=false
 Categories=Graphics;Viewer;
-MimeType=application/x-cbz;application/x-cbr;
+MimeType=application/x-cbz;application/x-cbr;x-scheme-handler/mihonqt;
 Keywords=manga;reader;comic;tachiyomi;mihon;
 StartupWMClass=MihonQT

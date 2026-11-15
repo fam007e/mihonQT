@@ -50,6 +50,9 @@ cmake --build build --config Release
 | `-DBUILD_TESTS=ON` | ON | Qt Test suites (`ctest`) |
 | `-DBUILD_FUZZERS=ON` | OFF | libFuzzer targets for the parser/image/sort code |
 | `-DENABLE_SANITIZERS=ON` | OFF | ASan + UBSan on the main binary |
+| `-DMIHON_MAL_CLIENT_ID="..."` | `""` | MyAnimeList OAuth Client ID (injected into `AppSecrets.h`) |
+| `-DMIHON_ANILIST_CLIENT_ID="..."` | `""` | AniList OAuth Client ID (injected into `AppSecrets.h`) |
+| `-DMIHON_ANILIST_CLIENT_SECRET="..."` | `""` | AniList OAuth Client Secret |
 
 ## Tests
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 # Check if version is provided from command line (for releases)
 if(NOT DEFINED PROJECT_VERSION)
-    set(PROJECT_VERSION "0.2.0")
+    set(PROJECT_VERSION "0.3.0")
 endif()
 
 project(MihonQT VERSION ${PROJECT_VERSION} LANGUAGES CXX)
@@ -41,6 +41,19 @@ set(QUAZIP_INSTALL OFF CACHE BOOL "Disable QuaZip install" FORCE)
 set(QUAZIP_QT_MAJOR_VERSION 6 CACHE STRING "Qt version to use (6 or 5)" FORCE)
 set(QUAZIP_ENABLE_QTEXTCODEC OFF CACHE BOOL "Enable use of QTextCodec" FORCE) # Disable QTextCodec
 add_subdirectory(libs/quazip)
+
+# --- Secrets Configuration ---
+if(NOT DEFINED ANILIST_CLIENT_ID)
+    set(ANILIST_CLIENT_ID "$ENV{ANILIST_CLIENT_ID}")
+endif()
+if(NOT DEFINED MAL_CLIENT_ID)
+    set(MAL_CLIENT_ID "$ENV{MAL_CLIENT_ID}")
+endif()
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/config/AppSecrets.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/AppSecrets.h"
+    @ONLY
+)
 
 # --- Project Files ---
 add_executable(MihonQT
@@ -85,6 +98,9 @@ add_executable(MihonQT
     src/download/DownloadManager.cpp
     src/tracking/TrackingService.cpp
     src/tracking/AniListTracker.cpp
+    src/tracking/MyAnimeListTracker.cpp
+    src/tracking/MangaUpdatesTracker.cpp
+    src/tracking/TrackerManager.cpp
     src/ui/TrackingWidget.cpp
     src/backup/BackupManager.cpp
     src/model/Category.cpp
@@ -117,6 +133,7 @@ endif()
 
 # --- Include Directories ---
 target_include_directories(MihonQT PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
     ${GUMBO_INCLUDE_DIRS}
     ${WEBP_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}/src

@@ -1,13 +1,12 @@
 #include "AniListTracker.h"
+#include "AppSecrets.h"
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QUrlQuery>
 #include <QDesktopServices>
 #include <QDebug>
 
-// You would register your app at https://anilist.co/settings/developer
-const QString AniListTracker::CLIENT_ID = "YOUR_ANILIST_CLIENT_ID";  // Replace with actual
-const QString AniListTracker::REDIRECT_URI = "mihonqt://anilist-auth";
+const QString AniListTracker::REDIRECT_URI = "https://anilist.co/api/v2/oauth/pin";
 
 AniListTracker& AniListTracker::instance()
 {
@@ -25,11 +24,21 @@ AniListTracker::AniListTracker(QObject *parent)
     m_userId = settings.value("tracking/anilist_user_id", 0).toLongLong();
 }
 
+QString AniListTracker::clientId() const
+{
+    QSettings settings("MihonQT", "MihonQT");
+    QString id = settings.value("tracking/anilist_client_id", "").toString().trimmed();
+    if (!id.isEmpty()) return id;
+    QString secretId = AppSecrets::anilistClientId().trimmed();
+    if (!secretId.isEmpty() && secretId != "@ANILIST_CLIENT_ID@") return secretId;
+    return QString();
+}
+
 QUrl AniListTracker::authUrl() const
 {
     QUrl url("https://anilist.co/api/v2/oauth/authorize");
     QUrlQuery query;
-    query.addQueryItem("client_id", CLIENT_ID);
+    query.addQueryItem("client_id", clientId());
     query.addQueryItem("response_type", "token");
     url.setQuery(query);
     return url;
@@ -142,6 +151,9 @@ void AniListTracker::unbind(long localMangaId)
 
     QSettings settings("MihonQT", "MihonQT");
     settings.remove(QString("tracking/anilist_bind_%1").arg(localMangaId));
+    settings.remove(QString("tracking/anilist_entry_chapters_%1").arg(localMangaId));
+    settings.remove(QString("tracking/anilist_entry_status_%1").arg(localMangaId));
+    settings.remove(QString("tracking/anilist_entry_score_%1").arg(localMangaId));
 }
 
 void AniListTracker::update(long localMangaId, int chaptersRead, int status, float score)
@@ -167,11 +179,15 @@ void AniListTracker::update(long localMangaId, int chaptersRead, int status, flo
     QJsonObject vars;
     vars["mediaId"] = static_cast<int>(mediaId);
     vars["progress"] = chaptersRead;
-    vars["status"] = QJsonValue::fromVariant(mapStatus(status));
+    vars["status"] = mapStatus(status);
     if (score > 0) vars["score"] = static_cast<double>(score);
 
-    executeGraphQL(gql, vars, [this, localMangaId](const QJsonObject& data) {
+    executeGraphQL(gql, vars, [this, localMangaId, chaptersRead, status, score](const QJsonObject& data) {
         if (data.contains("SaveMediaListEntry")) {
+            QSettings settings("MihonQT", "MihonQT");
+            settings.setValue(QString("tracking/anilist_entry_chapters_%1").arg(localMangaId), chaptersRead);
+            settings.setValue(QString("tracking/anilist_entry_status_%1").arg(localMangaId), status);
+            settings.setValue(QString("tracking/anilist_entry_score_%1").arg(localMangaId), score);
             emit updateSuccess(localMangaId);
         } else {
             emit error("Failed to update AniList");
@@ -184,23 +200,34 @@ TrackingEntry AniListTracker::getEntry(long localMangaId)
     TrackingEntry entry;
     entry.mangaId = localMangaId;
 
+    QSettings settings("MihonQT", "MihonQT");
+    if (!m_bindings.contains(localMangaId)) {
+        long savedRemoteId = settings.value(QString("tracking/anilist_bind_%1").arg(localMangaId), 0).toLongLong();
+        if (savedRemoteId > 0) {
+            m_bindings[localMangaId] = savedRemoteId;
+        }
+    }
+
     if (m_bindings.contains(localMangaId)) {
         entry.id = m_bindings[localMangaId];
+        entry.chaptersRead = settings.value(QString("tracking/anilist_entry_chapters_%1").arg(localMangaId), 0).toInt();
+        entry.status = settings.value(QString("tracking/anilist_entry_status_%1").arg(localMangaId), Reading).toInt();
+        entry.score = settings.value(QString("tracking/anilist_entry_score_%1").arg(localMangaId), 0.0f).toFloat();
     }
 
     return entry;
 }
 
-int AniListTracker::mapStatus(int mihonStatus)
+QString AniListTracker::mapStatus(int mihonStatus)
 {
-    // Map to AniList status strings
+    // AniList GraphQL MediaListStatus enum values
     switch (mihonStatus) {
-        case Reading: return 1;    // CURRENT
-        case Completed: return 2;  // COMPLETED
-        case OnHold: return 3;     // PAUSED
-        case Dropped: return 4;    // DROPPED
-        case PlanToRead: return 5; // PLANNING
-        default: return 1;
+        case Reading: return "CURRENT";
+        case Completed: return "COMPLETED";
+        case OnHold: return "PAUSED";
+        case Dropped: return "DROPPED";
+        case PlanToRead: return "PLANNING";
+        default: return "CURRENT";
     }
 }
 

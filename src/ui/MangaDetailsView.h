@@ -44,11 +44,27 @@ private:
     void updateHeader();
     void updateDescriptionText();
     void restyle();
+    void setSelectionMode(bool active);
+    void updateSelectionCount();
+    void markSelectedAsRead(bool read);
+    void bookmarkSelected();
 
     Manga m_manga;
     QList<Chapter> m_chapters;
     enum ChapterFilter { All, UnreadOnly, DownloadedOnly, BookmarkedOnly };
     ChapterFilter m_chapterFilter = All;
+
+    // Selection mode state
+    bool m_selectionMode = false;
+    int m_lastSelectedRowIndex = -1;
+    QWidget *m_selectionBar = nullptr;
+    QLabel *m_selectionCountLabel = nullptr;
+    QPushButton *m_selectButton = nullptr;
+    QPushButton *m_markReadBtn = nullptr;
+    QPushButton *m_markUnreadBtn = nullptr;
+    QPushButton *m_bookmarkBtn = nullptr;
+    QPushButton *m_selectAllBtn = nullptr;
+    QPushButton *m_cancelSelectBtn = nullptr;
 
     // Header widgets
     QLabel *m_coverLabel;
@@ -63,6 +79,7 @@ private:
     QHBoxLayout *m_genreLayout;
     QPushButton *m_libraryButton;
     QPushButton *m_categoriesButton;
+    QPushButton *m_trackingButton;
     QPushButton *m_openWebViewButton;
 
     // Chapter section

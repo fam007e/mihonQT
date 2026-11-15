@@ -28,12 +28,14 @@ public:
     void update(long localMangaId, int chaptersRead, int status, float score) override;
     TrackingEntry getEntry(long localMangaId) override;
 
+    QString clientId() const;
+
 private:
     explicit AniListTracker(QObject *parent = nullptr);
 
     void executeGraphQL(const QString& query, const QJsonObject& variables,
                         std::function<void(const QJsonObject&)> callback);
-    int mapStatus(int mihonStatus);
+    QString mapStatus(int mihonStatus);
 
     QNetworkAccessManager *m_networkManager;
     QString m_accessToken;
@@ -42,7 +44,6 @@ private:
     // Local binding storage: localMangaId -> remoteMediaId
     QMap<long, long> m_bindings;
 
-    static const QString CLIENT_ID;
     static const QString REDIRECT_URI;
 };
 

@@ -8,8 +8,14 @@
 #include "config/PreferenceManager.h"
 #include "reader/ReaderWidget.h"
 #include "../AppVersion.h"
+#include "tracking/AniListTracker.h"
+#include "tracking/MyAnimeListTracker.h"
+#include "tracking/MangaUpdatesTracker.h"
 #include <QDesktopServices>
 #include <QFileDialog>
+#include <QInputDialog>
+#include <QFormLayout>
+#include <QDialogButtonBox>
 #include <QPainter>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -672,11 +678,12 @@ void SettingsView::createTrackingPage() {
   QVBoxLayout *layout = new QVBoxLayout(page);
   layout->setAlignment(Qt::AlignTop);
 
-  QGroupBox *trackingGroup = new QGroupBox("Tracking", this);
+  QGroupBox *trackingGroup = new QGroupBox("Tracking Services", this);
   QVBoxLayout *trackingLayout = new QVBoxLayout(trackingGroup);
+  trackingLayout->setSpacing(10);
 
   m_autoUpdateTrackersCheckBox =
-      new QCheckBox("Automatically update trackers", this);
+      new QCheckBox("Automatically update trackers when reading", this);
   m_autoUpdateTrackersCheckBox->setChecked(
       PreferenceManager::instance()
           .value("tracking/auto_update", true)
@@ -684,13 +691,111 @@ void SettingsView::createTrackingPage() {
   connect(m_autoUpdateTrackersCheckBox, &QCheckBox::toggled, [](bool checked) {
     PreferenceManager::instance().setValue("tracking/auto_update", checked);
   });
-
-  m_loginMalButton = new QPushButton("Login to MyAnimeList", this);
-  m_loginAnilistButton = new QPushButton("Login to AniList", this);
-
   trackingLayout->addWidget(m_autoUpdateTrackersCheckBox);
-  trackingLayout->addWidget(m_loginMalButton);
+
+  auto updateTrackerButtons = [this]() {
+    m_loginAnilistButton->setIcon(QIcon(":/icons/anilist.svg"));
+    m_loginAnilistButton->setIconSize(QSize(20, 20));
+    if (AniListTracker::instance().isLoggedIn()) {
+      m_loginAnilistButton->setText("  AniList: Logged In (Click to Logout)");
+    } else {
+      m_loginAnilistButton->setText("  Login to AniList");
+    }
+
+    m_loginMalButton->setIcon(QIcon(":/icons/myanimelist.svg"));
+    m_loginMalButton->setIconSize(QSize(20, 20));
+    if (MyAnimeListTracker::instance().isLoggedIn()) {
+      m_loginMalButton->setText("  MyAnimeList: Logged In (Click to Logout)");
+    } else {
+      m_loginMalButton->setText("  Login to MyAnimeList");
+    }
+
+    m_loginMangaUpdatesButton->setIcon(QIcon(":/icons/mangaupdates.svg"));
+    m_loginMangaUpdatesButton->setIconSize(QSize(20, 20));
+    if (MangaUpdatesTracker::instance().isLoggedIn()) {
+      m_loginMangaUpdatesButton->setText("  MangaUpdates: Logged In (Click to Logout)");
+    } else {
+      m_loginMangaUpdatesButton->setText("  Login to MangaUpdates");
+    }
+  };
+
+  m_loginAnilistButton = new QPushButton(this);
+  connect(m_loginAnilistButton, &QPushButton::clicked, this, [this, updateTrackerButtons]() {
+    if (AniListTracker::instance().isLoggedIn()) {
+      if (QMessageBox::question(this, "Logout", "Log out from AniList?") == QMessageBox::Yes) {
+        AniListTracker::instance().logout();
+        updateTrackerButtons();
+      }
+    } else {
+      QDesktopServices::openUrl(AniListTracker::instance().authUrl());
+      bool ok;
+      QString token = QInputDialog::getText(this, "AniList Login",
+          "After authorizing, paste the access_token parameter from the URL:",
+          QLineEdit::Normal, "", &ok);
+      if (ok && !token.trimmed().isEmpty()) {
+        AniListTracker::instance().login(token.trimmed());
+      }
+    }
+  });
+
+  m_loginMalButton = new QPushButton(this);
+  connect(m_loginMalButton, &QPushButton::clicked, this, [this, updateTrackerButtons]() {
+    if (MyAnimeListTracker::instance().isLoggedIn()) {
+      if (QMessageBox::question(this, "Logout", "Log out from MyAnimeList?") == QMessageBox::Yes) {
+        MyAnimeListTracker::instance().logout();
+        updateTrackerButtons();
+      }
+    } else {
+      QDesktopServices::openUrl(MyAnimeListTracker::instance().authUrl());
+      bool ok;
+      QString code = QInputDialog::getText(this, "MyAnimeList Login",
+          "After approving on MyAnimeList, paste the authorization code (or the full redirected URL) from the address bar:",
+          QLineEdit::Normal, "", &ok);
+      if (ok && !code.trimmed().isEmpty()) {
+        MyAnimeListTracker::instance().login(code.trimmed());
+      }
+    }
+  });
+
+  m_loginMangaUpdatesButton = new QPushButton(this);
+  connect(m_loginMangaUpdatesButton, &QPushButton::clicked, this, [this, updateTrackerButtons]() {
+    if (MangaUpdatesTracker::instance().isLoggedIn()) {
+      if (QMessageBox::question(this, "Logout", "Log out from MangaUpdates?") == QMessageBox::Yes) {
+        MangaUpdatesTracker::instance().logout();
+        updateTrackerButtons();
+      }
+    } else {
+      QDialog dialog(this);
+      dialog.setWindowTitle("Login to MangaUpdates");
+      QFormLayout form(&dialog);
+      QLineEdit userEdit(&dialog);
+      QLineEdit passEdit(&dialog);
+      passEdit.setEchoMode(QLineEdit::Password);
+      form.addRow("Username:", &userEdit);
+      form.addRow("Password:", &passEdit);
+      QDialogButtonBox buttonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dialog);
+      form.addRow(&buttonBox);
+      connect(&buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+      connect(&buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+      if (dialog.exec() == QDialog::Accepted) {
+        QString user = userEdit.text().trimmed();
+        QString pass = passEdit.text();
+        if (!user.isEmpty() && !pass.isEmpty()) {
+          MangaUpdatesTracker::instance().loginWithCredentials(user, pass);
+        }
+      }
+    }
+  });
+
+  connect(&AniListTracker::instance(), &TrackingService::loginSuccess, this, updateTrackerButtons);
+  connect(&MyAnimeListTracker::instance(), &TrackingService::loginSuccess, this, updateTrackerButtons);
+  connect(&MangaUpdatesTracker::instance(), &TrackingService::loginSuccess, this, updateTrackerButtons);
+
+  updateTrackerButtons();
+
   trackingLayout->addWidget(m_loginAnilistButton);
+  trackingLayout->addWidget(m_loginMalButton);
+  trackingLayout->addWidget(m_loginMangaUpdatesButton);
   layout->addWidget(trackingGroup);
 
   m_contentStack->addWidget(page);
