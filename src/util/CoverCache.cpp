@@ -81,19 +81,7 @@ QPixmap CoverCache::load(const QString& url, const QString& referer)
     // Image CDNs with hotlink protection (pstatic, madara cover CDNs, ...)
     // 403 requests that don't look like a browser image load from the site.
     QNetworkRequest request{QUrl(url)};
-    request.setHeader(QNetworkRequest::UserAgentHeader, NetworkAccessManager::browserUserAgent());
-    request.setRawHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
-    request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
-    request.setRawHeader("sec-ch-ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"");
-    request.setRawHeader("sec-ch-ua-mobile", "?0");
-    request.setRawHeader("sec-ch-ua-platform", "\"Windows\"");
-    request.setRawHeader("Sec-Fetch-Dest", "image");
-    request.setRawHeader("Sec-Fetch-Mode", "no-cors");
-    request.setRawHeader("Sec-Fetch-Site", "cross-site");
-    if (!referer.isEmpty()) {
-        request.setRawHeader("Referer", referer.toUtf8());
-        request.setRawHeader("Sec-Fetch-Site", "same-site");
-    }
+    NetworkAccessManager::applyImageHeaders(request, referer);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::NoLessSafeRedirectPolicy);
     // A grid fires ~20 parallel cover fetches at one CDN; HTTP/2 multiplexing

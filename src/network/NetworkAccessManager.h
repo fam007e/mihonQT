@@ -38,11 +38,14 @@ public:
     explicit NetworkAccessManager(QJSEngine* engine = nullptr, QObject *parent = nullptr);
     ~NetworkAccessManager() override;
     
-    Q_INVOKABLE QJSValue get(const QString& url);
-    Q_INVOKABLE QJSValue post(const QString& url, const QByteArray& data);
+    Q_INVOKABLE QJSValue get(const QString& url, const QJSValue& headers = QJSValue());
+    Q_INVOKABLE QJSValue post(const QString& url, const QByteArray& data, const QJSValue& headers = QJSValue());
     // Set a session cookie for the source's own domain (e.g. Madara sites'
     // "toonily-mature=1" adult-content toggle, which is checked server-side).
     Q_INVOKABLE bool setCookie(const QString& name, const QString& value);
+    // Set a persistent custom header for all requests from this extension
+    // (e.g. Hiperdex "x-cfg-auth").
+    Q_INVOKABLE void setHeader(const QString& name, const QString& value);
 
     void setTrusted(bool trusted) { m_isTrusted = trusted; }
     void setAllowedBaseUrl(const QString& baseUrl) { m_allowedBaseUrl = baseUrl; }
@@ -57,6 +60,10 @@ public:
     // "Verifying you are human" forever.
     static void setUserAgentOverride(const QString& ua);
     static QString browserUserAgent();
+    // Browser image-load headers (used by CoverCache and ReaderWidget).
+    // Derives client hints from browserUserAgent() so CDNs and Cloudflare
+    // receive consistent UA, platform hints, and referer.
+    static void applyImageHeaders(QNetworkRequest& request, const QString& referer = QString());
 
 signals:
     void requestFinished(const QJSValue& result);
@@ -70,6 +77,7 @@ private:
     // issues a challenge. Client hints are derived from browserUserAgent()
     // so they never contradict the UA.
     void applyBrowserHeaders(QNetworkRequest& request) const;
+    void applyCustomHeaders(QNetworkRequest& request, const QJSValue& headers) const;
     // 403/503 responses that look like a bot challenge (Cloudflare headers
     // or challenge markers in the body) open the WebView dialog.
     bool looksLikeChallenge(QNetworkReply* reply) const;
@@ -80,6 +88,7 @@ private:
     QJSEngine* m_engine;
     bool m_isTrusted = true;
     QString m_allowedBaseUrl;
+    QMap<QString, QString> m_customHeaders;
 
     void handleCloudflareIntercept(const QString& url);
     bool isUrlAllowed(const QString& url) const;

@@ -42,6 +42,7 @@ private:
     void updateLibraryButton();
     void updateSortButton();
     void updateHeader();
+    void updateDescriptionText();
     void restyle();
 
     Manga m_manga;
@@ -56,6 +57,10 @@ private:
     QLabel *m_statusLabel;
     QLabel *m_chapterCountLabel;
     QLabel *m_descriptionLabel;
+    QPushButton *m_moreButton;
+    bool m_descriptionExpanded = false;
+    QWidget *m_genreContainer;
+    QHBoxLayout *m_genreLayout;
     QPushButton *m_libraryButton;
     QPushButton *m_categoriesButton;
     QPushButton *m_openWebViewButton;

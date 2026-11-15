@@ -136,22 +136,46 @@ void MangaCoverCard::restyle()
 void MangaCoverCard::updateTitle()
 {
     const QFontMetrics fm(m_titleLabel->font());
-    QString t = m_manga.title();
-    // Manual 2-line elide
+    QString t = m_manga.title().trimmed();
     if (fm.horizontalAdvance(t) <= CoverW) {
         m_titleLabel->setText(t);
         return;
     }
-    // Split roughly in half for two lines, elide second
-    int mid = qBound(1, t.length() / 2, t.length() - 1);
-    int breakAt = t.lastIndexOf(' ', mid);
-    if (breakAt <= 0) breakAt = mid;
-    QString line1 = t.left(breakAt).trimmed();
-    QString rest = t.mid(breakAt).trimmed();
-    QString line2 = rest.length() > CoverW
-        ? fm.elidedText(rest, Qt::ElideRight, CoverW)
-        : rest;
-    m_titleLabel->setText(line1 + "\n" + line2);
+
+    // Break words dynamically across up to 2 lines
+    QStringList words = t.split(' ', Qt::SkipEmptyParts);
+    QString line1, line2;
+    int i = 0;
+
+    // Fill line 1
+    while (i < words.size()) {
+        QString test = line1.isEmpty() ? words[i] : line1 + " " + words[i];
+        if (fm.horizontalAdvance(test) <= CoverW) {
+            line1 = test;
+            ++i;
+        } else {
+            break;
+        }
+    }
+
+    // If even the first word is wider than CoverW, take it on line 1
+    if (line1.isEmpty() && i < words.size()) {
+        line1 = words[i++];
+    }
+
+    // Remaining words for line 2
+    QStringList remaining;
+    while (i < words.size()) {
+        remaining << words[i++];
+    }
+    QString rest = remaining.join(' ');
+
+    if (!rest.isEmpty()) {
+        line2 = fm.elidedText(rest, Qt::ElideRight, CoverW);
+        m_titleLabel->setText(line1 + "\n" + line2);
+    } else {
+        m_titleLabel->setText(fm.elidedText(line1, Qt::ElideRight, CoverW));
+    }
 }
 
 void MangaCoverCard::updateBadges()

@@ -39,6 +39,7 @@ returns.
 | `Left` / `Right` (or `A` / `D`) | Previous / next page (direction follows reading mode) |
 | `Up` / `Down` | Page step |
 | `Space` | Next page |
+| `W` / `Shift+D` / `Ctrl+D` | Toggle Double Page Spread mode |
 | `s` | Reader settings + overlay bars |
 | `Esc` | Close overlay, then leave the reader |
 | Overlay slider | Jump to any page (direction matches RTL modes) |

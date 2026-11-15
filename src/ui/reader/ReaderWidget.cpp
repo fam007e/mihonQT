@@ -195,6 +195,16 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId, bool startAtEnd)
         return;
     }
 
+    // Apply manga-specific reading mode if saved, otherwise use default
+    if (m_currentManga.viewerFlags() > 0) {
+        setReadingMode(static_cast<ReadingMode>(m_currentManga.viewerFlags() - 1));
+    } else {
+        int defaultMode = PreferenceManager::instance().value("reader/default_mode", 1).toInt();
+        setReadingMode(static_cast<ReadingMode>(defaultMode));
+    }
+
+    setFocus();
+
     m_localSource->setBaseDirectory(m_currentManga.url());
     m_chapters = m_chapterRepo->getChaptersByMangaId(mangaId);
     // Ensure chapters are sorted in ascending reading order (matching Android Mihon ReaderViewModel)
@@ -459,21 +469,27 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
         NetworkAccessManager::sharedCookieJar()->setParent(qApp);
     }
 
+    // Determine referer for page requests (manga CDNs require the chapter page referer)
+    QString chapterReferer = chapter.url();
+    QString baseUrl = source->baseUrl();
+    if (!chapterReferer.isEmpty()) {
+        if (chapterReferer.startsWith("/")) {
+            chapterReferer = baseUrl + chapterReferer;
+        }
+    } else if (!baseUrl.isEmpty()) {
+        chapterReferer = baseUrl.endsWith('/') ? baseUrl : (baseUrl + "/");
+    }
+
     int pageIndex = 0;
     for (const QString& url : pageUrls) {
         QString fullPageUrl = url;
-        QString baseUrl = source->baseUrl();
         if (fullPageUrl.startsWith("/")) {
             fullPageUrl = baseUrl + fullPageUrl;
         }
 
         QNetworkRequest req{QUrl(fullPageUrl)};
-        req.setHeader(QNetworkRequest::UserAgentHeader, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        NetworkAccessManager::applyImageHeaders(req, chapterReferer);
         req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-
-        if (!baseUrl.isEmpty()) {
-            req.setRawHeader("Referer", baseUrl.toUtf8());
-        }
 
         QNetworkReply* reply = s_readerNam->get(req);
         connect(reply, &QNetworkReply::finished, this, [this, reply, pageIndex]() {
@@ -570,6 +586,13 @@ void ReaderWidget::setReadingMode(ReadingMode mode)
 
 void ReaderWidget::keyPressEvent(QKeyEvent *event)
 {
+    // Double page spread toggle: Shift+D, Ctrl+D, or W
+    if ((event->key() == Qt::Key_D && (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier))) ||
+        (event->key() == Qt::Key_W && event->modifiers() == Qt::NoModifier)) {
+        toggleDoublePageSpread();
+        return;
+    }
+
     switch (event->key()) {
     case Qt::Key_Right:
     case Qt::Key_D:
@@ -950,6 +973,12 @@ void ReaderWidget::resizeEvent(QResizeEvent *event)
     }
 }
 
+void ReaderWidget::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    setFocus();
+}
+
 void ReaderWidget::saveReadingProgress()
 {
     if (m_currentChapterId > 0) {
@@ -1083,7 +1112,26 @@ void ReaderWidget::toggleSettingsOverlay()
 void ReaderWidget::onReadingModeChanged(int mode)
 {
     setReadingMode(static_cast<ReadingMode>(mode));
-    PreferenceManager::instance().setValue("reader/default_mode", mode);
+    // Persist reading mode specifically for this manga only
+    if (m_currentManga.id() != -1) {
+        m_currentManga.setViewerFlags(mode + 1);
+        m_mangaRepo->updateManga(m_currentManga);
+    }
+}
+
+void ReaderWidget::toggleDoublePageSpread()
+{
+    ReadingMode newMode;
+    if (m_readingMode == DoublePageSpread) {
+        newMode = RightToLeft;
+    } else if (m_readingMode == DoublePageSpreadLeftToRight) {
+        newMode = LeftToRight;
+    } else if (m_readingMode == LeftToRight) {
+        newMode = DoublePageSpreadLeftToRight;
+    } else {
+        newMode = DoublePageSpread;
+    }
+    onReadingModeChanged(static_cast<int>(newMode));
 }
 
 void ReaderWidget::onScaleTypeChanged(int type)

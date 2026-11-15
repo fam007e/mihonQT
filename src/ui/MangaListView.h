@@ -17,6 +17,7 @@ public:
 
     void populateManga(const QList<Manga>& mangaList);
     void appendManga(const QList<Manga>& mangaList);
+    bool shouldFetchMore() const;
 
 signals:
     void mangaSelected(const Manga& manga);

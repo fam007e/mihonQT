@@ -2,7 +2,7 @@
 
 MihonQT loads manga sources as plain JavaScript files from
 `~/.local/share/MihonQT/extensions`. Each file registers a `source` object
-(see `extensions/WeebCentral.js` for a full working example) and mirrors the
+(see the extensions repository for full working examples) and mirrors the
 shape of a Kotlin extension from
 [extensions-source](https://github.com/keiyoushi/extensions-source), using
 `Html.parse(...).select(...)` instead of Jsoup.
@@ -59,6 +59,8 @@ Chapters use `url`, `name`, `scanlator`, `chapterNumber`, `dateUpload`
 |---|---|
 | `Network.get(url)` | HTTP body as a string (synchronous, runs off the UI thread) |
 | `Network.post(url, data)` | HTTP body as a string |
+| `Network.setHeader(name, value)` | Sets a custom HTTP header for subsequent requests (e.g. auth or API tokens) |
+| `Network.setReferer(url)` | Sets the HTTP `Referer` header for subsequent requests |
 
 A browser-like User-Agent is sent and Cloudflare cookies harvested through
 the built-in WebView dialog are applied automatically.
@@ -88,4 +90,4 @@ the built-in WebView dialog are applied automatically.
 - Element objects stay alive as long as JavaScript holds them; results of
   `select` are parented to their document.
 - Extension files must end with the `source` object registered — see
-  `extensions/WeebCentral.js` as the reference implementation.
+  the extensions repository sources (e.g. `en.weebcentral.js`) as reference implementations.

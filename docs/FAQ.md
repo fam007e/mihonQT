@@ -38,7 +38,7 @@ Currently, MihonQT supports `.cbz` archives and local directories containing ima
 
 ### How do I navigate in the reader?
 - **Scroll:** Vertically in Webtoon mode, or click/tap the sides in Paged mode.
-- **Keyboard:** Left/Right flip pages (direction follows the reading mode), Space steps forward, `s` opens the reader settings and overlay bars.
+- **Keyboard:** Left/Right (or `A`/`D`) flips pages (direction follows the reading mode), Space steps forward, `W` or `Shift+D`/`Ctrl+D` toggles Double Page Spread mode, and `s` opens the reader settings overlay.
 - **Back:** `Esc` closes overlays first, then leaves the view; `Ctrl+Q` quits the app.
 - The full navigation map lives in the **[Keyboard Shortcuts](https://github.com/fam007e/mihonQT/wiki/Keyboard-Shortcuts)** page.
 

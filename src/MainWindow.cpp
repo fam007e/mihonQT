@@ -413,7 +413,11 @@ void MainWindow::onMangaSelected(const Manga& manga)
             QList<SChapter> sChapters = source->getChapterList(dbManga);
             int chapterOrder = 0;
             QSqlDatabase::database().transaction();
+            QSet<QString> seenUrls;
+            int insertedCount = 0;
             for (const SChapter& sChap : sChapters) {
+                if (seenUrls.contains(sChap.url())) continue;
+                seenUrls.insert(sChap.url());
                 Chapter chapter(
                     -1, // id (will be assigned by DB)
                     mangaIdToOpen,
@@ -428,9 +432,10 @@ void MainWindow::onMangaSelected(const Manga& manga)
                     QDateTime::currentSecsSinceEpoch() // lastModifiedAt
                 );
                 chapterRepo.insertChapter(chapter);
+                insertedCount++;
             }
             QSqlDatabase::database().commit();
-            qDebug() << "Inserted" << sChapters.size() << "chapters for manga ID:" << mangaIdToOpen;
+            qDebug() << "Inserted" << insertedCount << "chapters for manga ID:" << mangaIdToOpen;
         } else {
             qWarning() << "Failed to insert new manga into database.";
             return;
@@ -442,27 +447,25 @@ void MainWindow::onMangaSelected(const Manga& manga)
         QList<SChapter> sChapters = source->getChapterList(dbManga);
         QList<Chapter> existingChapters = chapterRepo.getChaptersByMangaId(mangaIdToOpen);
 
+        QSet<QString> existingUrls;
+        for (const Chapter& existing : existingChapters) {
+            existingUrls.insert(existing.url());
+        }
+
         // Simple sync: add only those that don't exist by URL
         QSqlDatabase::database().transaction();
         for (const SChapter& sChap : sChapters) {
-            bool exists = false;
-            for (const Chapter& existing : existingChapters) {
-                if (existing.url() == sChap.url()) {
-                    exists = true;
-                    break;
-                }
-            }
+            if (existingUrls.contains(sChap.url())) continue;
+            existingUrls.insert(sChap.url());
 
-            if (!exists) {
-                Chapter chapter(
-                    -1, mangaIdToOpen, sChap.url(), sChap.name(), sChap.scanlator(),
-                    false, false, 0, sChap.chapterNumber(),
-                    existingChapters.size(), // Use current size as order
-                    QDateTime::currentSecsSinceEpoch(), sChap.dateUpload(),
-                    QDateTime::currentSecsSinceEpoch()
-                );
-                chapterRepo.insertChapter(chapter);
-            }
+            Chapter chapter(
+                -1, mangaIdToOpen, sChap.url(), sChap.name(), sChap.scanlator(),
+                false, false, 0, sChap.chapterNumber(),
+                existingChapters.size(), // Use current size as order
+                QDateTime::currentSecsSinceEpoch(), sChap.dateUpload(),
+                QDateTime::currentSecsSinceEpoch()
+            );
+            chapterRepo.insertChapter(chapter);
         }
         QSqlDatabase::database().commit();
     }
@@ -648,6 +651,7 @@ void MainWindow::showMangaList(long sourceId)
 void MainWindow::showReader(long mangaId, long chapterId, bool startAtEnd)
 {
     m_rootStack->setCurrentWidget(m_readerWidget);
+    m_readerWidget->setFocus();
     m_readerWidget->loadChapter(mangaId, chapterId, startAtEnd);
 }
 void MainWindow::onLocalMangaPathChanged(const QString& newPath)

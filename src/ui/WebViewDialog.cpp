@@ -30,6 +30,7 @@ WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
     QString ua = profile->httpUserAgent();
     static const QRegularExpression qtToken("QtWebEngine/[\\d.]+\\s*;?\\s*");
     ua.remove(qtToken);
+    profile->setHttpUserAgent(ua);
     NetworkAccessManager::setUserAgentOverride(ua);
 
     m_webView = new QWebEngineView(this);
@@ -51,6 +52,7 @@ WebViewDialog::WebViewDialog(const QString &url, QWidget *parent)
 
     QWebEngineCookieStore *cookieStore = profile->cookieStore();
     connect(cookieStore, &QWebEngineCookieStore::cookieAdded, this, &WebViewDialog::onCookieAdded);
+    cookieStore->loadAllCookies();
 
     m_webView->load(QUrl(url));
     layout->addWidget(m_webView);
@@ -83,8 +85,18 @@ void WebViewDialog::done(int result)
     // Seed the shared jar with everything harvested during the session, so
     // manually opened WebViews (and challenge solves) carry their cookies
     // into subsequent extension requests regardless of the caller.
-    if (!m_harvestedCookies.isEmpty() && !m_url.isEmpty()) {
-        NetworkAccessManager::sharedCookieJar()->setCookiesFromUrl(m_harvestedCookies, QUrl(m_url));
+    for (const QNetworkCookie &cookie : m_harvestedCookies) {
+        QUrl cookieUrl;
+        QString domain = cookie.domain();
+        if (domain.startsWith('.')) domain = domain.mid(1);
+        if (!domain.isEmpty()) {
+            cookieUrl.setScheme("https");
+            cookieUrl.setHost(domain);
+            cookieUrl.setPath(cookie.path().isEmpty() ? "/" : cookie.path());
+            NetworkAccessManager::sharedCookieJar()->setCookiesFromUrl({cookie}, cookieUrl);
+        } else if (!m_url.isEmpty()) {
+            NetworkAccessManager::sharedCookieJar()->setCookiesFromUrl({cookie}, QUrl(m_url));
+        }
     }
     QDialog::done(result);
 }

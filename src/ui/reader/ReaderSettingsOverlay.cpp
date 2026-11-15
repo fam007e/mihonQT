@@ -13,11 +13,13 @@ ReaderSettingsOverlay::ReaderSettingsOverlay(QWidget *parent)
 
 void ReaderSettingsOverlay::setupUi()
 {
-    // (No graphics effect: it breaks QWidget::render and offscreen painting)
+    setFixedWidth(380);
+    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(16, 16, 16, 16);
-    layout->setSpacing(16);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(12);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
 
     // Title
     QHBoxLayout *titleLayout = new QHBoxLayout();
@@ -35,20 +37,24 @@ void ReaderSettingsOverlay::setupUi()
     titleLayout->addWidget(titleLabel);
     titleLayout->addStretch();
     titleLayout->addWidget(backBtn);
-    titleLayout->addSpacing(10);
+    titleLayout->addSpacing(8);
     titleLayout->addWidget(closeBtn);
     layout->addLayout(titleLayout);
 
     // Reading Mode
     QLabel *modeLabel = new QLabel("Reading Mode", this);
     m_readingModeCombo = new QComboBox(this);
+    m_readingModeCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_readingModeCombo->setFixedHeight(36);
     m_readingModeCombo->addItem("Webtoon", 0);
     m_readingModeCombo->addItem("Left to Right", 1);
     m_readingModeCombo->addItem("Right to Left", 2);
     m_readingModeCombo->addItem("Double Page", 3);
     m_readingModeCombo->addItem("Double Page (Left to Right)", 4);
     connect(m_readingModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        emit readingModeChanged(m_readingModeCombo->itemData(index).toInt());
+        int mode = m_readingModeCombo->itemData(index).toInt();
+        updateDoublePageControlsVisibility(mode);
+        emit readingModeChanged(mode);
     });
     layout->addWidget(modeLabel);
     layout->addWidget(m_readingModeCombo);
@@ -56,6 +62,8 @@ void ReaderSettingsOverlay::setupUi()
     // Scale Type
     QLabel *scaleLabel = new QLabel("Scale Type", this);
     m_scaleTypeCombo = new QComboBox(this);
+    m_scaleTypeCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_scaleTypeCombo->setFixedHeight(36);
     m_scaleTypeCombo->addItem("Fit Screen", 1);
     m_scaleTypeCombo->addItem("Stretch", 2);
     m_scaleTypeCombo->addItem("Fit Width", 3);
@@ -73,6 +81,7 @@ void ReaderSettingsOverlay::setupUi()
     m_brightnessSlider = new QSlider(Qt::Horizontal, this);
     m_brightnessSlider->setRange(10, 100);
     m_brightnessSlider->setValue(100);
+    m_brightnessSlider->setFixedHeight(24);
     connect(m_brightnessSlider, &QSlider::valueChanged, this, &ReaderSettingsOverlay::brightnessChanged);
     layout->addWidget(brightnessLabel);
     layout->addWidget(m_brightnessSlider);
@@ -86,8 +95,6 @@ void ReaderSettingsOverlay::setupUi()
     connect(m_autoWideDetectCheck, &QCheckBox::toggled, this, &ReaderSettingsOverlay::autoWideDetectChanged);
     layout->addWidget(m_autoWideDetectCheck);
 
-    layout->addStretch();
-
     restyle();
 }
 
@@ -98,22 +105,66 @@ void ReaderSettingsOverlay::restyle()
         QStringLiteral(
         "ReaderSettingsOverlay {"
         "   background-color: %1;"
+        "   border: 1px solid %2;"
         "   border-radius: 16px;"
         "}"
-        "QLabel { color: %2; font-weight: bold; background: transparent; }"
-        "QCheckBox { color: %2; font-weight: normal; background: transparent; }"
-        "#overlayTitle { font-size: 16px; }"
-        "#overlayBackBtn { background-color: %3; color: %4; padding: 8px 14px;"
-        "  border-radius: 20px; border: none; font-weight: 600; }"
-        "#overlayBackBtn:hover { background-color: %5; }"
-        "#overlayCloseBtn { background: transparent; border: none; font-size: 16px; color: %2; }"
-        "#overlayCloseBtn:hover { color: %6; }")
-        .arg(c.surfaceContainerHigh.name(),
-             c.onSurface.name(),
-             c.secondaryContainer.name(),
-             c.onSecondaryContainer.name(),
-             ThemeManager::rgba(c.onSurface, 0.12f),
-             c.error.name()));
+        "QLabel { color: %3; font-weight: bold; background: transparent; font-size: 13px; }"
+        "QCheckBox { color: %3; font-weight: normal; background: transparent; font-size: 13px; spacing: 8px; }"
+        "#overlayTitle { font-size: 16px; font-weight: bold; color: %3; }"
+        "#overlayBackBtn { background-color: %4; color: %5; padding: 6px 14px;"
+        "  border-radius: 16px; border: none; font-weight: 600; font-size: 12px; }"
+        "#overlayBackBtn:hover { background-color: %6; }"
+        "#overlayCloseBtn { background: transparent; border: none; font-size: 16px; font-weight: bold; color: %3; padding: 2px 6px; }"
+        "#overlayCloseBtn:hover { color: %7; }"
+        "QComboBox {"
+        "   background-color: %8;"
+        "   color: %3;"
+        "   border: 1px solid %2;"
+        "   border-radius: 8px;"
+        "   padding: 6px 12px;"
+        "   font-size: 13px;"
+        "   font-weight: 500;"
+        "}"
+        "QComboBox:hover { background-color: %9;"
+        "   border: 1px solid %10; }"
+        "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 24px; border: none; }"
+        "QComboBox QAbstractItemView {"
+        "   background-color: %1;"
+        "   color: %3;"
+        "   border: 1px solid %2;"
+        "   border-radius: 8px;"
+        "   padding: 4px;"
+        "   selection-background-color: %4;"
+        "   selection-color: %5;"
+        "   outline: none;"
+        "}"
+        "QComboBox QAbstractItemView::item { min-height: 28px; padding: 4px 8px; }"
+        "QSlider::groove:horizontal {"
+        "   height: 6px;"
+        "   background: %2;"
+        "   border-radius: 3px;"
+        "}"
+        "QSlider::sub-page:horizontal {"
+        "   background: %10;"
+        "   border-radius: 3px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "   background: %10;"
+        "   width: 16px;"
+        "   height: 16px;"
+        "   margin: -5px 0;"
+        "   border-radius: 8px;"
+        "}")
+        .arg(c.surfaceContainerHigh.name(),              // %1
+             ThemeManager::rgba(c.outlineVariant, 0.4f),  // %2
+             c.onSurface.name(),                         // %3
+             c.secondaryContainer.name(),                // %4
+             c.onSecondaryContainer.name(),              // %5
+             ThemeManager::rgba(c.onSurface, 0.12f),     // %6
+             c.error.name(),                             // %7
+             c.surfaceContainerLow.name(),               // %8
+             c.surfaceContainerHighest.name(),           // %9
+             c.primary.name()));                         // %10
 }
 
 void ReaderSettingsOverlay::updateDoublePageControlsVisibility(int mode)
@@ -121,12 +172,20 @@ void ReaderSettingsOverlay::updateDoublePageControlsVisibility(int mode)
     bool isDoublePage = (mode == 3 || mode == 4);
     if (m_firstPageCoverCheck) m_firstPageCoverCheck->setVisible(isDoublePage);
     if (m_autoWideDetectCheck) m_autoWideDetectCheck->setVisible(isDoublePage);
+    adjustSize();
+    if (parentWidget()) {
+        int x = (parentWidget()->width() - width()) / 2;
+        int y = (parentWidget()->height() - height()) / 2;
+        move(x, y);
+    }
 }
 
 void ReaderSettingsOverlay::setCurrentReadingMode(int mode)
 {
+    m_readingModeCombo->blockSignals(true);
     int index = m_readingModeCombo->findData(mode);
     if (index >= 0) m_readingModeCombo->setCurrentIndex(index);
+    m_readingModeCombo->blockSignals(false);
     updateDoublePageControlsVisibility(mode);
 }
 

@@ -57,6 +57,7 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
     void showSettingsOverlay();
     void hideSettingsOverlay();
@@ -71,6 +72,7 @@ signals:
 
 public slots:
     void displayPage(const QImage& image, int pageIndex);
+    void toggleDoublePageSpread();
 
 private:
     void clearChapterContent();

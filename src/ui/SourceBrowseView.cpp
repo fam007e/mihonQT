@@ -278,4 +278,15 @@ void SourceBrowseView::onMangaFetchFinished()
         m_mangaListView->appendManga(list);
         qDebug() << "SourceBrowseView: Appended" << list.size() << "manga items (page" << m_currentPage << ").";
     }
+
+    // Auto-fill: if the loaded items don't fill the screen enough to allow
+    // scrolling (e.g. Madara sources with small 12-item pages on high-res displays),
+    // automatically request the next page so the viewport is populated.
+    if (list.size() > 0) {
+        QTimer::singleShot(100, this, [this]() {
+            if (m_lastPageCount > 0 && m_mangaListView && m_mangaListView->shouldFetchMore()) {
+                requestNextPage();
+            }
+        });
+    }
 }

@@ -174,7 +174,7 @@ void SettingsView::updateThemeColors() {
   }
   if (QLabel *aboutFooter = findChild<QLabel *>("aboutFooterLabel")) {
     aboutFooter->setStyleSheet(QStringLiteral(
-        "font-size: 11px; color: %1; background: transparent; padding-bottom: 16px;")
+        "font-size: 11px; color: %1; background: transparent; padding: 0 24px 16px 24px;")
         .arg(ThemeManager::rgba(c.onSurfaceVariant, 0.8f)));
   }
 
@@ -1039,10 +1039,12 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
   layout->addStretch();
 
   QLabel *footerLabel = new QLabel(
-      "© 2025 MihonQT Contributors — AGPLv3. "
+      "© 2025-2026 MihonQT Contributors — Apache-2.0 License.\n"
       "Not affiliated with the Mihon or Tachiyomi projects.", this);
   footerLabel->setObjectName("aboutFooterLabel");
   footerLabel->setAlignment(Qt::AlignCenter);
+  footerLabel->setWordWrap(true);
+  footerLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
   layout->addWidget(footerLabel);
 
   m_contentStack->addWidget(page);

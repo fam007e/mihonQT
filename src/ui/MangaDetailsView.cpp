@@ -20,11 +20,54 @@
 #include <QDateTime>
 #include <QFileInfo>
 #include <QDir>
+#include <QTextDocumentFragment>
+#include <QRegularExpression>
 #include "WebViewDialog.h"
 
 // ------------------------------------------------------------------
 // Helpers
 // ------------------------------------------------------------------
+
+static QString cleanSynopsis(const QString& raw)
+{
+    if (raw.isEmpty()) return QString();
+    QString text = raw;
+
+    // Convert <br>, <br/>, <p> to newlines
+    text.replace(QRegularExpression("<br\\s*/?>", QRegularExpression::CaseInsensitiveOption), "\n");
+    text.replace(QRegularExpression("</p>", QRegularExpression::CaseInsensitiveOption), "\n\n");
+    text.replace(QRegularExpression("<p[^>]*>", QRegularExpression::CaseInsensitiveOption), "");
+
+    // Strip remaining HTML tags
+    text.replace(QRegularExpression("<[^>]+>"), "");
+
+    // Unescape common HTML entities
+    text.replace("&quot;", "\"");
+    text.replace("&#039;", "'");
+    text.replace("&apos;", "'");
+    text.replace("&rsquo;", "’");
+    text.replace("&lsquo;", "‘");
+    text.replace("&ldquo;", "“");
+    text.replace("&rdquo;", "”");
+    text.replace("&amp;", "&");
+    text.replace("&lt;", "<");
+    text.replace("&gt;", ">");
+    text.replace("&nbsp;", " ");
+    text.replace("&hellip;", "…");
+    text.replace("&mdash;", "—");
+    text.replace("&ndash;", "–");
+
+    // Also use QTextDocumentFragment for any remaining numerical entities
+    if (text.contains('&')) {
+        QTextDocumentFragment frag = QTextDocumentFragment::fromHtml(text);
+        QString plain = frag.toPlainText();
+        if (!plain.isEmpty()) text = plain;
+    }
+
+    // Normalize multiple consecutive blank lines
+    text.replace(QRegularExpression("\n{3,}"), "\n\n");
+    return text.trimmed();
+}
 
 static QString statusText(int status)
 {
@@ -243,19 +286,17 @@ void MangaDetailsView::setupUi()
     infoLayout->addWidget(m_coverLabel);
 
     QVBoxLayout *textCol = new QVBoxLayout();
-    textCol->setSpacing(4);
+    textCol->setSpacing(6);
     QLabel *bigTitle = new QLabel(content);
     bigTitle->setObjectName("detailsBigTitle");
     m_authorLabel = new QLabel(content);
     m_statusLabel = new QLabel(content);
     m_chapterCountLabel = new QLabel(content);
-    m_descriptionLabel = new QLabel(content);
-    m_descriptionLabel->setWordWrap(true);
     textCol->addWidget(bigTitle);
     textCol->addWidget(m_authorLabel);
     textCol->addWidget(m_statusLabel);
     textCol->addWidget(m_chapterCountLabel);
-    textCol->addWidget(m_descriptionLabel, 1);
+    textCol->addStretch();
     infoLayout->addLayout(textCol, 1);
     contentLayout->addLayout(infoLayout);
     m_titleLabel = bigTitle; // big title in header column
@@ -323,6 +364,46 @@ void MangaDetailsView::setupUi()
     actionsLayout->addWidget(m_categoriesButton);
     actionsLayout->addStretch();
     contentLayout->addLayout(actionsLayout);
+
+    // Genre tags container (horizontal scroll)
+    QScrollArea *genreScroll = new QScrollArea(content);
+    genreScroll->setWidgetResizable(true);
+    genreScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    genreScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    genreScroll->setFrameShape(QFrame::NoFrame);
+    genreScroll->setStyleSheet("background-color: transparent;");
+    genreScroll->setFixedHeight(38);
+
+    m_genreContainer = new QWidget(genreScroll);
+    m_genreContainer->setStyleSheet("background-color: transparent;");
+    m_genreLayout = new QHBoxLayout(m_genreContainer);
+    m_genreLayout->setContentsMargins(20, 2, 20, 2);
+    m_genreLayout->setSpacing(8);
+    m_genreLayout->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    genreScroll->setWidget(m_genreContainer);
+    contentLayout->addWidget(genreScroll);
+
+    // Description / Synopsis container
+    QWidget *descContainer = new QWidget(content);
+    descContainer->setStyleSheet("background-color: transparent;");
+    QVBoxLayout *descLayout = new QVBoxLayout(descContainer);
+    descLayout->setContentsMargins(20, 4, 20, 6);
+    descLayout->setSpacing(4);
+
+    m_descriptionLabel = new QLabel(descContainer);
+    m_descriptionLabel->setWordWrap(true);
+    m_descriptionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    descLayout->addWidget(m_descriptionLabel);
+
+    m_moreButton = new QPushButton(descContainer);
+    m_moreButton->setFlat(true);
+    m_moreButton->setCursor(Qt::PointingHandCursor);
+    connect(m_moreButton, &QPushButton::clicked, this, [this]() {
+        m_descriptionExpanded = !m_descriptionExpanded;
+        updateDescriptionText();
+    });
+    descLayout->addWidget(m_moreButton);
+    contentLayout->addWidget(descContainer);
 
     // --- Chapter section header: "N chapters" + sort/filter buttons ---
     QWidget *chapterHeader = new QWidget(content);
@@ -414,8 +495,12 @@ void MangaDetailsView::restyle()
         "font-size: 12px; color: %1; background: transparent;")
         .arg(c.onSurfaceVariant.name()));
     m_descriptionLabel->setStyleSheet(QStringLiteral(
-        "font-size: 13px; color: %1; background: transparent;")
+        "font-size: 13px; line-height: 1.4; color: %1; background: transparent;")
         .arg(c.onSurfaceVariant.name()));
+    m_moreButton->setStyleSheet(QStringLiteral(
+        "QPushButton { font-size: 12px; font-weight: 600; color: %1; background: transparent; text-align: left; padding: 2px 0; border: none; }"
+        "QPushButton:hover { text-decoration: underline; }")
+        .arg(c.primary.name()));
     m_chaptersHeaderLabel->setStyleSheet(QStringLiteral(
         "font-size: 14px; font-weight: 600; color: %1; background: transparent;")
         .arg(c.onBackground.name()));
@@ -480,6 +565,59 @@ void MangaDetailsView::updateHeader()
             : QPixmap(thumb);
         if (!pm.isNull())
             m_coverLabel->setPixmap(pm.scaled(120, 180, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+    }
+
+    // Genre tags
+    while (QLayoutItem *item = m_genreLayout->takeAt(0)) {
+        if (item->widget()) item->widget()->deleteLater();
+        delete item;
+    }
+
+    const M3Colors& c = ThemeManager::instance().colors();
+    QStringList genres = m_manga.genre().split(',', Qt::SkipEmptyParts);
+    if (genres.isEmpty()) {
+        m_genreContainer->parentWidget()->hide();
+    } else {
+        m_genreContainer->parentWidget()->show();
+        for (const QString& g : genres) {
+            QString trimmed = g.trimmed();
+            if (trimmed.isEmpty()) continue;
+            QLabel *chip = new QLabel(trimmed, m_genreContainer);
+            chip->setStyleSheet(QStringLiteral(
+                "QLabel { background: %1; color: %2; border-radius: 12px; padding: 4px 10px; font-size: 11px; font-weight: 500; border: 1px solid %3; }"
+            ).arg(ThemeManager::rgba(c.primary, 0.12f), c.onSurface.name(), ThemeManager::rgba(c.outlineVariant, 0.4f)));
+            m_genreLayout->addWidget(chip);
+        }
+        m_genreLayout->addStretch();
+    }
+
+    // Synopsis
+    m_descriptionExpanded = false;
+    updateDescriptionText();
+}
+
+void MangaDetailsView::updateDescriptionText()
+{
+    QString desc = cleanSynopsis(m_manga.description());
+    if (desc.isEmpty()) {
+        m_descriptionLabel->hide();
+        m_moreButton->hide();
+        return;
+    }
+    m_descriptionLabel->show();
+
+    if (desc.length() > 250 && !m_descriptionExpanded) {
+        m_descriptionLabel->setText(desc.left(250) + "…");
+        m_moreButton->setText("More ▼");
+        m_moreButton->show();
+    } else {
+        m_descriptionLabel->setText(desc);
+        if (desc.length() > 250) {
+            m_moreButton->setText("Less ▲");
+            m_moreButton->show();
+        } else {
+            m_moreButton->hide();
+        }
     }
 }
 

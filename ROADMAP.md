@@ -18,11 +18,14 @@ All core logic and the main UI are implemented and functional. The first tagged 
 ## ✅ Phase 2: Library & UI Polish
 **Status: Completed**
 - [x] Library Screen (grid view with unread/download badges, category tabs, search and filters)
-- [x] Manga Details Screen (Mihon-style header, chapter rows, chapter filter menu)
-- [x] Improved Reader (tap zones, keyboard shortcuts)
-- [x] Double-Page Spread (cover offset, wide-page detection, dynamic stepping)
+- [x] Manga Details Screen (Mihon-style header, chapter rows, chapter filter menu, HTML synopsis cleaning)
+- [x] Improved Reader (tap zones, keyboard shortcuts, immediate focus)
+- [x] Double-Page Spread (cover offset, wide-page detection, dynamic stepping, hotkey toggle via W / Shift+D / Ctrl+D)
+- [x] Per-Manga Viewing Mode (manga-specific reading mode persistence)
+- [x] Dynamic Grid Tiles (word-wrapping and elision based on font metrics)
 - [x] Material 3 Theming (Mihon Default, Nord, Catppuccin, Tokyo Night, Dracula + AMOLED)
 - [x] Full Keyboard Navigation (rail hub, arrows, Esc back, Ctrl+Q)
+- [x] Licensing Alignment (Apache License 2.0, aligning with upstream Mihon)
 
 ## 🚧 Phase 3: Online Sources & Networking
 **Status: In Progress**

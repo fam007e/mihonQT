@@ -354,8 +354,11 @@ void ThemeManager::applyGlobalQss()
 
         // --- Menus ---
         "QMenu { background-color: %SURF_CONTAINER%; border: 1px solid %OUTLINE_VAR%; border-radius: 12px; padding: 6px; }"
-        "QMenu::item { padding: 8px 26px 8px 14px; border-radius: 8px; color: %ONSURF%; }"
+        "QMenu::item { padding: 8px 26px 8px 24px; border-radius: 8px; color: %ONSURF%; }"
         "QMenu::item:selected { background-color: rgba(127,127,127,0.16); }"
+        "QMenu::indicator { width: 16px; height: 16px; left: 6px; }"
+        "QMenu::indicator:checked { image: url(:/icons/check.svg); }"
+        "QMenu::indicator:unchecked { image: none; }"
         "QMenu::separator { height: 1px; background-color: %OUTLINE_VAR%; margin: 4px 8px; }"
 
         // --- Lists ---

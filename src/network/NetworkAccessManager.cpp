@@ -13,6 +13,7 @@
 #include "config/PreferenceManager.h"
 #include <QVariant>
 #include <QApplication>
+#include <QJSValueIterator>
 #include "../ui/WebViewDialog.h"
 
 SharedCookieJar* NetworkAccessManager::sharedCookieJar()
@@ -66,6 +67,25 @@ bool NetworkAccessManager::setCookie(const QString& name, const QString& value)
     return sharedCookieJar()->setCookiesFromUrl(QList<QNetworkCookie>{cookie}, base);
 }
 
+void NetworkAccessManager::setHeader(const QString& name, const QString& value)
+{
+    m_customHeaders.insert(name, value);
+}
+
+void NetworkAccessManager::applyCustomHeaders(QNetworkRequest& request, const QJSValue& headers) const
+{
+    for (auto it = m_customHeaders.constBegin(); it != m_customHeaders.constEnd(); ++it) {
+        request.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
+    }
+    if (headers.isObject()) {
+        QJSValueIterator it(headers);
+        while (it.hasNext()) {
+            it.next();
+            request.setRawHeader(it.name().toUtf8(), it.value().toString().toUtf8());
+        }
+    }
+}
+
 void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
 {
     // Top-level Chrome navigation headers; sites behind CDNs/WAFs 403
@@ -94,6 +114,34 @@ void NetworkAccessManager::applyBrowserHeaders(QNetworkRequest& request) const
     request.setRawHeader("Sec-Fetch-Mode", "navigate");
     request.setRawHeader("Sec-Fetch-Site", "none");
     request.setRawHeader("Sec-Fetch-User", "?1");
+}
+
+void NetworkAccessManager::applyImageHeaders(QNetworkRequest& request, const QString& referer)
+{
+    const QString ua = browserUserAgent();
+    request.setHeader(QNetworkRequest::UserAgentHeader, ua);
+    request.setRawHeader("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8");
+    request.setRawHeader("Accept-Language", "en-US,en;q=0.9");
+
+    static const QRegularExpression chromeVerRe("Chrome/(\\d+)");
+    int major = 120;
+    QRegularExpressionMatch m = chromeVerRe.match(ua);
+    if (m.hasMatch()) major = m.captured(1).toInt();
+    request.setRawHeader("sec-ch-ua",
+        QStringLiteral("\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"%1\", \"Google Chrome\";v=\"%1\"").arg(major).toUtf8());
+    request.setRawHeader("sec-ch-ua-mobile", "?0");
+    const char* platform = ua.contains("Windows NT") ? "Windows"
+        : (ua.contains("Mac OS X") || ua.contains("Macintosh")) ? "macOS"
+        : (ua.contains("Linux") || ua.contains("X11")) ? "Linux" : "Unknown";
+    request.setRawHeader("sec-ch-ua-platform", QStringLiteral("\"%1\"").arg(platform).toUtf8());
+
+    request.setRawHeader("Sec-Fetch-Dest", "image");
+    request.setRawHeader("Sec-Fetch-Mode", "no-cors");
+    request.setRawHeader("Sec-Fetch-Site", "cross-site");
+    if (!referer.isEmpty()) {
+        request.setRawHeader("Referer", referer.toUtf8());
+        request.setRawHeader("Sec-Fetch-Site", "same-site");
+    }
 }
 
 static bool bodyLooksLikeChallenge(const QByteArray& body)
@@ -148,11 +196,32 @@ bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& u
     bool success = false;
     auto showDialog = [url, &success]() {
         WebViewDialog dialog(url);
-        dialog.exec();
+        int res = dialog.exec();
 
         QList<QNetworkCookie> cookies = dialog.getHarvestedCookies();
+        bool hasClearance = false;
+        for (const auto& c : cookies) {
+            if (c.name() == "cf_clearance") {
+                hasClearance = true;
+                break;
+            }
+        }
         if (!cookies.isEmpty()) {
-            sharedCookieJar()->setCookiesFromUrl(cookies, QUrl(url));
+            for (const QNetworkCookie &cookie : cookies) {
+                QUrl cookieUrl;
+                QString domain = cookie.domain();
+                if (domain.startsWith('.')) domain = domain.mid(1);
+                if (!domain.isEmpty()) {
+                    cookieUrl.setScheme("https");
+                    cookieUrl.setHost(domain);
+                    cookieUrl.setPath(cookie.path().isEmpty() ? "/" : cookie.path());
+                    sharedCookieJar()->setCookiesFromUrl({cookie}, cookieUrl);
+                } else {
+                    sharedCookieJar()->setCookiesFromUrl({cookie}, QUrl(url));
+                }
+            }
+        }
+        if (res == QDialog::Accepted || hasClearance) {
             success = true;
         }
     };
@@ -167,11 +236,13 @@ bool NetworkAccessManager::solveChallenge(QNetworkReply* reply, const QString& u
     if (!success) {
         qDebug() << "Challenge dialog closed without a clearance cookie (site"
                  << QUrl(url).host() << "- the challenge may not have completed)";
+    } else {
+        s_lastAttemptMs.remove(url);
     }
     return success;
 }
 
-QJSValue NetworkAccessManager::get(const QString& url)
+QJSValue NetworkAccessManager::get(const QString& url, const QJSValue& headers)
 {
     if (!isUrlAllowed(url)) {
         if (m_engine) {
@@ -183,6 +254,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
     QNetworkRequest request = QNetworkRequest(QUrl(url));
     request.setHeader(QNetworkRequest::UserAgentHeader, browserUserAgent());
     applyBrowserHeaders(request);
+    applyCustomHeaders(request, headers);
     QNetworkReply *reply = m_networkManager.get(request);
 
     QEventLoop loop;
@@ -201,7 +273,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
             qWarning() << "200 response carries a challenge page for" << url << "- opening WebView interceptor...";
             if (solveChallenge(reply, url)) {
                 reply->deleteLater();
-                return this->get(url); // Retry with the harvested cookies
+                return this->get(url, headers); // Retry with the harvested cookies
             }
         }
 
@@ -222,7 +294,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
     } else {
         if (solveChallenge(reply, url)) {
             reply->deleteLater();
-            return this->get(url); // Retry the request with the new cookies
+            return this->get(url, headers); // Retry the request with the new cookies
         }
 
         qWarning() << "Network GET request failed:" << reply->errorString();
@@ -237,7 +309,7 @@ QJSValue NetworkAccessManager::get(const QString& url)
     return result;
 }
 
-QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
+QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data, const QJSValue& headers)
 {
     if (!isUrlAllowed(url)) {
         if (m_engine) {
@@ -250,6 +322,7 @@ QJSValue NetworkAccessManager::post(const QString& url, const QByteArray& data)
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
     request.setHeader(QNetworkRequest::UserAgentHeader, browserUserAgent());
     applyBrowserHeaders(request);
+    applyCustomHeaders(request, headers);
     QNetworkReply *reply = m_networkManager.post(request, data);
 
     QEventLoop loop;
@@ -322,7 +395,14 @@ bool NetworkAccessManager::isUrlAllowed(const QString& urlString) const
     // Check base URL restriction for untrusted extensions
     if (!m_isTrusted && !m_allowedBaseUrl.isEmpty()) {
         QUrl baseUrl(m_allowedBaseUrl);
-        if (url.host().toLower() != baseUrl.host().toLower()) {
+        QString reqHost = url.host().toLower();
+        QString baseHost = baseUrl.host().toLower();
+        QString rootDomain = baseHost.startsWith("www.") ? baseHost.mid(4) : baseHost;
+
+        bool sameDomain = (reqHost == baseHost) || 
+                          (reqHost == rootDomain) || 
+                          reqHost.endsWith("." + rootDomain);
+        if (!sameDomain) {
             qWarning() << "Blocking cross-domain request from untrusted extension:" << urlString 
                        << "(Allowed domain:" << baseUrl.host() << ")";
             return false;

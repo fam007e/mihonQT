@@ -71,6 +71,13 @@ void MangaListView::appendManga(const QList<Manga>& mangaList)
     updateGridLayout();
 }
 
+bool MangaListView::shouldFetchMore() const
+{
+    if (m_cards.isEmpty()) return false;
+    QScrollBar *bar = m_scrollArea->verticalScrollBar();
+    return (bar->maximum() < 200);
+}
+
 void MangaListView::updateGridLayout()
 {
     // Remove all layout items without deleting the actual card widgets
