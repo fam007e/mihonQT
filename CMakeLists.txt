@@ -62,6 +62,8 @@ add_executable(MihonQT
     src/ui/ThemeManager.cpp
     src/ui/SettingsView.cpp
     src/ui/CategoryEditDialog.cpp
+    src/ui/WhatsNewDialog.cpp
+    src/ui/OnboardingDialog.cpp
     src/ui/SidebarWidget.cpp
     src/ui/FlowLayout.cpp
     src/ui/MoreView.cpp

@@ -23,6 +23,10 @@
 #include "ui/DownloadView.h"
 #include "ui/StatisticsView.h"
 #include "ui/CategoryEditDialog.h"
+#include "ui/OnboardingDialog.h"
+#include "ui/WhatsNewDialog.h"
+#include "AppVersion.h"
+#include <QTimer>
 
 #include <QMenuBar>
 #include <QShortcut>
@@ -249,6 +253,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initial navigation
     onNavigationRequested(0);
+
+    // First-run onboarding or update changelog check
+    QTimer::singleShot(50, this, &MainWindow::checkFirstRunOrUpdate);
 }
 
 MainWindow::~MainWindow()
@@ -728,4 +735,38 @@ void MainWindow::onRequestPreviousChapter(long currentChapterId)
     } else {
         qDebug() << "No previous chapter found.";
     }
+}
+
+void MainWindow::checkFirstRunOrUpdate()
+{
+    QString lastVersion = PreferenceManager::instance().value("app/last_version", "").toString();
+    const QString currentVersion = QString::fromLatin1(AppVersion::VERSION);
+
+    if (lastVersion.isEmpty()) {
+        showOnboarding();
+        PreferenceManager::instance().setValue("app/last_version", currentVersion);
+    } else if (lastVersion != currentVersion) {
+        showWhatsNew();
+        PreferenceManager::instance().setValue("app/last_version", currentVersion);
+    }
+}
+
+void MainWindow::showOnboarding()
+{
+    OnboardingDialog dlg(this);
+    connect(&dlg, &OnboardingDialog::onboardingFinished, this, [this]() {
+        QSettings settings("MihonQT", "MihonQT");
+        QString path = settings.value("localMangaPath", "").toString();
+        if (!path.isEmpty()) {
+            onLocalMangaPathChanged(path);
+        }
+        m_libraryView->refreshLibrary();
+    });
+    dlg.exec();
+}
+
+void MainWindow::showWhatsNew()
+{
+    WhatsNewDialog dlg(this);
+    dlg.exec();
 }

@@ -70,6 +70,9 @@ private:
     void showMangaList(long sourceId); // New method to show manga list for a source
     void showReader(long mangaId, long chapterId, bool startAtEnd = false);
     void showMangaDetails(const Manga& manga); // [NEW]
+    void checkFirstRunOrUpdate();
+    void showOnboarding();
+    void showWhatsNew();
 
     // QSqlDatabase m_database; // Removed member
     SourceManager *m_sourceManager;

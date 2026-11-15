@@ -25,6 +25,7 @@ All core logic and the main UI are implemented and functional. The first tagged 
 - [x] Dynamic Grid Tiles (word-wrapping and elision based on font metrics)
 - [x] Material 3 Theming (Mihon Default, Nord, Catppuccin, Tokyo Night, Dracula + AMOLED)
 - [x] Full Keyboard Navigation (rail hub, arrows, Esc back, Ctrl+Q)
+- [x] First-Run Onboarding Wizard & "What's New" Changelog Dialog
 - [x] Licensing Alignment (Apache License 2.0, aligning with upstream Mihon)
 
 ## 🚧 Phase 3: Online Sources & Networking

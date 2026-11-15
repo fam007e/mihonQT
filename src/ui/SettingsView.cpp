@@ -1,11 +1,13 @@
 #include "SettingsView.h"
 #include "CategoryEditDialog.h"
+#include "WhatsNewDialog.h"
 #include "FlowLayout.h"
 #include "ThemeManager.h"
 #include "UiUtils.h"
 #include "backup/BackupManager.h"
 #include "config/PreferenceManager.h"
 #include "reader/ReaderWidget.h"
+#include "../AppVersion.h"
 #include <QDesktopServices>
 #include <QFileDialog>
 #include <QPainter>
@@ -166,6 +168,12 @@ void SettingsView::updateThemeColors() {
     aboutVersion->setStyleSheet(QStringLiteral(
         "font-size: 14px; color: %1; background: transparent;")
         .arg(c.onSurfaceVariant.name()));
+  }
+  if (QPushButton *whatsNew = findChild<QPushButton *>("aboutWhatsNewBtn")) {
+    whatsNew->setStyleSheet(QStringLiteral(
+        "#aboutWhatsNewBtn { background-color: %1; color: %2; border: none; border-radius: 15px; font-weight: 600; font-size: 12px; padding: 4px 16px; }"
+        "#aboutWhatsNewBtn:hover { background-color: %3; }")
+        .arg(c.secondaryContainer.name(), c.onSecondaryContainer.name(), ThemeManager::rgba(c.onSurface, 0.12f)));
   }
   if (QLabel *aboutDesc = findChild<QLabel *>("aboutDescLabel")) {
     aboutDesc->setStyleSheet(QStringLiteral(
@@ -968,10 +976,20 @@ void SettingsView::createAboutPage() {  QWidget *page = new QWidget(this);
   titleLabel->setAlignment(Qt::AlignCenter);
   layout->addWidget(titleLabel);
 
-  QLabel *versionLabel = new QLabel("Version 0.1.0-alpha", this);
+  QLabel *versionLabel = new QLabel(QString("Version %1").arg(AppVersion::VERSION), this);
   versionLabel->setObjectName("aboutVersionLabel");
   versionLabel->setAlignment(Qt::AlignCenter);
   layout->addWidget(versionLabel);
+
+  QPushButton *whatsNewBtn = new QPushButton("What's New", this);
+  whatsNewBtn->setObjectName("aboutWhatsNewBtn");
+  whatsNewBtn->setCursor(Qt::PointingHandCursor);
+  whatsNewBtn->setFixedHeight(30);
+  connect(whatsNewBtn, &QPushButton::clicked, this, [this]() {
+    WhatsNewDialog dlg(this);
+    dlg.exec();
+  });
+  layout->addWidget(whatsNewBtn, 0, Qt::AlignCenter);
 
   QLabel *descLabel = new QLabel(
       "A native desktop manga reader for Linux, Windows and macOS.<br>"
