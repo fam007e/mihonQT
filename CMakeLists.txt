@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
-project(MihonQT VERSION 0.2.0 LANGUAGES CXX)
+
+# Check if version is provided from command line (for releases)
+if(NOT DEFINED PROJECT_VERSION)
+    set(PROJECT_VERSION "0.2.0")
+endif()
+
+project(MihonQT VERSION ${PROJECT_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
