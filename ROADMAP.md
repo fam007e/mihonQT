@@ -1,9 +1,9 @@
 # Roadmap: Porting Mihon to Qt for Desktop (macOS, Linux, Windows)
 
-This document outlines the progress of porting Mihon to a cross-platform desktop application using Qt 6. Last updated: 2026-11-14, after the v0.1.0-alpha release.
+This document outlines the progress of porting Mihon to a cross-platform desktop application using Qt 6. Last updated: 2026-11-15, for the v0.2.0-alpha release.
 
 ## 🏁 Current Status: Alpha
-All core logic and the main UI are implemented and functional. The first tagged release (v0.1.0-alpha) ships prebuilt binaries for Linux, Windows and macOS.
+All core logic and the main UI are implemented and functional. Prebuilt binaries for Linux, Windows and macOS are published on GitHub Releases.
 
 ---
 
