@@ -46,7 +46,7 @@ private:
     void restyle();
     void setSelectionMode(bool active);
     void updateSelectionCount();
-    void markSelectedAsRead(bool read);
+    void markSelectedAsRead(bool markAsRead);
     void bookmarkSelected();
 
     Manga m_manga;
