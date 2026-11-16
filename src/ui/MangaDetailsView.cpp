@@ -193,17 +193,17 @@ public:
     void restyle()
     {
         const M3Colors& c = ThemeManager::instance().colors();
-        const bool read = m_chapter.isRead(); // flawfinder: ignore (identifier contains "read", not libc read)
+        const bool isRead = m_chapter.isRead();
         // Mihon Android style: read chapters are dimmed (38% opacity)
         m_titleLabel->setStyleSheet(QStringLiteral(
             "font-size: 14px; background: transparent; color: %1; %2")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.38f) : c.onSurface.name(),
-                 read ? "" : "font-weight: 500;"));
+            .arg(isRead ? ThemeManager::rgba(c.onSurface, 0.38f) : c.onSurface.name(),
+                 isRead ? "" : "font-weight: 500;"));
         m_subLabel->setStyleSheet(QStringLiteral(
             "font-size: 12px; background: transparent; color: %1;")
-            .arg(read ? ThemeManager::rgba(c.onSurface, 0.38f)
+            .arg(isRead ? ThemeManager::rgba(c.onSurface, 0.38f)
                       : c.onSurfaceVariant.name()));
-        m_unreadDot->setVisible(!read && !m_selectionMode);
+        m_unreadDot->setVisible(!isRead && !m_selectionMode);
         m_unreadDot->setStyleSheet(QStringLiteral("background: %1; border-radius: 4px;").arg(c.primary.name()));
         if (m_bookmarkBadge) {
             m_bookmarkBadge->setVisible(m_chapter.bookmark());
@@ -858,9 +858,9 @@ void MangaDetailsView::refreshChapters()
     auto comparator = getChapterComparator(m_manga, m_manga.sortDescending());
     std::sort(m_chapters.begin(), m_chapters.end(), comparator);
 
-    int read = 0, shown = 0;
+    int readCount = 0, shown = 0;
     for (const Chapter& chapter : m_chapters) {
-        if (chapter.isRead()) ++read; // flawfinder: ignore ("read" substring, not libc read)
+        if (chapter.isRead()) ++readCount;
         // Apply the filter menu selection
         switch (m_chapterFilter) {
         case UnreadOnly:      if (chapter.isRead()) continue; break;
@@ -975,7 +975,7 @@ void MangaDetailsView::refreshChapters()
 
     if (m_chapterFilter == All)
         m_chaptersHeaderLabel->setText(
-            QStringLiteral("%1 chapters  ·  %2 read").arg(m_chapters.size()).arg(read)); // flawfinder: ignore
+            QStringLiteral("%1 chapters  ·  %2 read").arg(m_chapters.size()).arg(readCount));
     else
         m_chaptersHeaderLabel->setText(
             QStringLiteral("%1 of %2 chapters").arg(shown).arg(m_chapters.size()));
@@ -1005,15 +1005,15 @@ void MangaDetailsView::updateSelectionCount()
     m_bookmarkBtn->setEnabled(count > 0);
 }
 
-void MangaDetailsView::markSelectedAsRead(bool read)
+void MangaDetailsView::markSelectedAsRead(bool markAsRead)
 {
     ChapterRepository& repo = DatabaseManager::instance().chapterRepository();
     int maxCh = 0;
     for (ChapterRow *row : chapterRows()) {
         if (row->isSelected()) {
             Chapter ch = row->chapter();
-            ch.setIsRead(read);
-            if (read) {
+            ch.setIsRead(markAsRead);
+            if (markAsRead) {
                 ch.setLastPageRead(0);
                 if (ch.chapterNumber() > maxCh) {
                     maxCh = static_cast<int>(ch.chapterNumber());
@@ -1022,7 +1022,7 @@ void MangaDetailsView::markSelectedAsRead(bool read)
             repo.updateChapter(ch);
         }
     }
-    if (read && maxCh > 0) {
+    if (markAsRead && maxCh > 0) {
         TrackerManager::instance().updateProgress(m_manga.id(), maxCh);
     }
     setSelectionMode(false);
