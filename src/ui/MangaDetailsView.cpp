@@ -306,8 +306,10 @@ protected:
             QPainter p(this);
             p.setRenderHint(QPainter::Antialiasing);
             const QRectF box = QRectF(rect()).adjusted(8, 2, -8, -2);
+            QColor fill = ThemeManager::instance().colors().primary;
+            fill.setAlphaF(0.18f);
             p.setPen(QPen(ThemeManager::instance().colors().primary, 1.5));
-            p.setBrush(ThemeManager::rgba(ThemeManager::instance().colors().primary, 0.18f));
+            p.setBrush(fill);
             p.drawRoundedRect(box, 8, 8);
         } else if (hasFocus()) {
             QPainter p(this);
