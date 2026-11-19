@@ -5,6 +5,8 @@
 ### What is MihonQT?
 MihonQT is a desktop manga reader inspired by the Mihon (formerly Tachiyomi) Android app. It allows you to read local manga files and install extensions to read from online sources.
 
+MihonQT is an **independent community project** — it is not affiliated with, endorsed by, or connected to the Mihon or Tachiyomi development teams.
+
 ### Which platforms are supported?
 MihonQT is built with Qt 6 and is designed to run on Linux, Windows, and macOS.
 
@@ -30,6 +32,14 @@ before they can fetch anything.
 
 ### What is the user interface inspired by?
 MihonQT features a modern, Material 3-inspired design that closely matches the Tachiyomi/Mihon Android app experience, providing a familiar and premium feel for mobile users.
+
+### How can I support the project?
+There is no donation setup for MihonQT. The **Donate** button in **More** opens
+the [Support page](https://fam007e.github.io/mihonQT/DONATE.html), which
+explains the situation and points at the places where support helps most —
+chiefly **[Mihon](https://github.com/mihonapp/mihon)** itself, the app MihonQT
+is a port of. Filing good bug reports, helping users, and improving the docs
+all count too.
 
 ## Tracking Services
 
@@ -73,9 +83,36 @@ Currently, MihonQT supports `.cbz` archives and local directories containing ima
 
 ### How do I navigate in the reader?
 - **Scroll:** Vertically in Webtoon mode, or click/tap the sides in Paged mode.
-- **Keyboard:** Left/Right (or `A`/`D`) flips pages (direction follows the reading mode), Space steps forward, `W` or `Shift+D`/`Ctrl+D` toggles Double Page Spread mode, and `s` opens the reader settings overlay.
+- **Keyboard:** `Right`/`Left` (or `D`/`A`) move forward/backward in the page count — which arrow key is *forward* follows the reading direction (`Right` in Left-to-Right, `Left` in Right-to-Left), also inside Double Page Spread. `Space` steps forward, `W` cycles reading modes (Webtoon → Right-to-Left → Left-to-Right) and leaves Double Page to Webtoon, `Shift+D`/`Ctrl+D` toggles Double Page Spread, and `s` opens the reader settings overlay.
 - **Back:** `Esc` closes overlays first, then leaves the view; `Ctrl+Q` quits the app.
 - The full navigation map lives in the **[Keyboard Shortcuts](https://github.com/fam007e/mihonQT/wiki/Keyboard-Shortcuts)** page.
+
+### How does Double Page Spread work?
+Toggle it with `Shift+D`/`Ctrl+D` (or **Double Page** in the reader settings). The
+spread is always **manga-ordered** — the current page sits on the right and the
+next page on the left, matching how manga artwork is drawn — in every reading
+mode.
+- **Remembered per chapter:** close the app mid-chapter and reopening that
+  chapter resumes in double-page; starting a *different* chapter begins in your
+  base reading mode again until you toggle it.
+- **Re-aligning:** the spread pairs the page you toggled on with the next one —
+  toggle while standing on a spread's left half and the artwork lines up.
+- **Webtoon** is a long strip, so double-page doesn't apply there (`Shift+D` is
+  a no-op) and `W` is the way in.
+- **Options:** *First page is cover* keeps page 1 single; *Don't pair wide
+  pages* shows pre-merged splash images alone instead of pairing them.
+
+### Why does "Mark as unread" send me back to page 1?
+Marking a chapter unread resets its saved page, so it reopens from the first
+page — the point of unreading. If you only want to keep reading where you
+stopped, don't toggle its read state.
+
+### Why did the statistics numbers change?
+Statistics are now a **library dashboard** and count your **library** only:
+content that was synced while browsing a manga you never added (and its
+chapters) is reported separately under **Outside library**. You also get new
+sections — Reading state (started/completed) and Activity (chapters read in
+the last 7 and 30 days, last-read date).
 
 ## Troubleshooting
 

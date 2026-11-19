@@ -25,8 +25,13 @@ cmake --build build -j$(nproc)
 
 ## Highlights
 
-- **Double-page spread reader** with cover offset, wide-page detection and
-  RTL/LTR/vertical modes
+- **Double-page spread reader** — always manga-ordered (current page right,
+  next left), with cover offset, wide-page detection, and a per-chapter
+  memory: close mid-chapter and reopening resumes in double-page. Webtoon
+  (long strip) stays single-column.
+- **Native widget style support** — run the app with your desktop's own Qt
+  style (Breeze, Oxygen, Kvantum, Fusion, System default) or the built-in
+  Material look
 - **JavaScript extensions** — full HTML5 parsing with CSS selectors, running
   off the UI thread
 - **Mihon Android theming** — the same Material 3 palettes, plus AMOLED
@@ -37,6 +42,8 @@ cmake --build build -j$(nproc)
   pre-filled chapter counts
 - **Batch Chapter Management** — <kbd>Shift</kbd> + Click range selection,
   "Mark previous chapters as read", and bulk download/bookmarking
+- **Statistics dashboard** — library overview, reading state, recent activity
+  and outside-library tracking
 - **Local-source support** — `.cbz` archives and folder image collections
 
 ## Links
