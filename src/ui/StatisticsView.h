@@ -3,8 +3,10 @@
 
 #include <QWidget>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QLabel>
 #include <QScrollArea>
+#include <QHash>
 
 class StatisticsView : public QWidget
 {
@@ -21,16 +23,19 @@ private slots:
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void setupUi();
-    QWidget* createStatCard(const QString& title, const QString& value, const QString& icon);
+    QWidget* createStatCard(const QString& key, const QString& title, const QString& icon);
+    QGridLayout* addSection(const QString& title, int columns);
+    void setValue(const QString& key, int value);
+    void setValue(const QString& key, const QString& value);
+    static int countQuery(const QString& sql);
+    static QString relativeDate(long long epochSecs);
 
     QVBoxLayout *m_statsLayout;
-    QLabel *m_totalMangaLabel;
-    QLabel *m_totalChaptersLabel;
-    QLabel *m_readChaptersLabel;
-    QLabel *m_totalCategoriesLabel;
+    QHash<QString, QLabel*> m_valueLabels;
 };
 
 #endif // STATISTICSVIEW_H

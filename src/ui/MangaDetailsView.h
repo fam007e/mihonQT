@@ -24,6 +24,9 @@ class MangaDetailsView : public QWidget
 public:
     explicit MangaDetailsView(QWidget *parent = nullptr);
     void setManga(const Manga& manga);
+    // Re-reads chapters from the database (call after the reader updates
+    // read state/progress so the list reflects it immediately).
+    void refreshChapters();
 
 signals:
     void chapterSelected(const Manga& manga, const Chapter& chapter);
@@ -38,7 +41,6 @@ protected:
 private:
     void setupUi();
     QList<ChapterRow*> chapterRows() const;
-    void refreshChapters();
     void updateLibraryButton();
     void updateSortButton();
     void updateHeader();

@@ -41,6 +41,8 @@ protected:
 
 private slots:
     void onThemeChanged(int index);
+    void onStyleChanged(int index);
+    void syncStyleControls();
     void onReadingModeChanged(int index);
     void onCategoryChanged(int index);
     void onEditCategoriesClicked();
@@ -65,6 +67,7 @@ private:
 
     // Appearance widgets
     QComboBox *m_themeComboBox;
+    QComboBox *m_styleComboBox = nullptr;
     QCheckBox *m_pureBlackCheckBox;
 
     // Display widgets

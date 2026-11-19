@@ -196,13 +196,21 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId, bool startAtEnd)
         return;
     }
 
-    // Apply manga-specific reading mode if saved, otherwise use default
+    // Apply manga-specific reading mode if saved, otherwise use default.
+    // Double-page is a session-scoped view toggle — a chapter (new or
+    // reopened) always starts in the base single-page direction; the saved
+    // double value only comes from older builds and is dropped here.
+    m_hasModeBeforeDouble = false; // fresh context per manga
+    ReadingMode savedMode;
     if (m_currentManga.viewerFlags() > 0) {
-        setReadingMode(static_cast<ReadingMode>(m_currentManga.viewerFlags() - 1));
+        savedMode = static_cast<ReadingMode>(m_currentManga.viewerFlags() - 1);
     } else {
         int defaultMode = PreferenceManager::instance().value("reader/default_mode", 1).toInt();
-        setReadingMode(static_cast<ReadingMode>(defaultMode));
+        savedMode = static_cast<ReadingMode>(defaultMode);
     }
+    if (savedMode == DoublePageSpread || savedMode == DoublePageSpreadLeftToRight)
+        savedMode = defaultSinglePageMode();
+    setReadingMode(savedMode);
 
     setFocus();
 
@@ -226,6 +234,23 @@ void ReaderWidget::loadChapter(long mangaId, long chapterId, bool startAtEnd)
 
     if (chapterToLoad.id() != -1) {
         m_currentChapterId = chapterToLoad.id();
+
+        // Resume double-page mode if the reader was left in it for THIS
+        // chapter (e.g. the app was closed mid-chapter). Any other chapter
+        // keeps the base single-page mode applied above.
+        if (m_currentChapterId > 0 &&
+            PreferenceManager::instance()
+                    .value("reader/double_page_chapter", -1)
+                    .toLongLong() == m_currentChapterId) {
+            m_modeBeforeDouble = static_cast<ReadingMode>(
+                PreferenceManager::instance()
+                    .value("reader/double_page_return_mode",
+                           static_cast<int>(LeftToRight))
+                    .toInt());
+            m_hasModeBeforeDouble = true;
+            setReadingMode(DoublePageSpread);
+        }
+
         loadAndDisplayPages(chapterToLoad, startAtEnd);
     } else {
         qDebug() << "ReaderWidget: Chapter not found for ID:" << chapterId << "in manga:" << mangaId;
@@ -373,7 +398,7 @@ void ReaderWidget::loadAndDisplayPages(const Chapter& chapter, bool startAtEnd)
 
     if (startAtEnd && !m_loadedPages.isEmpty()) {
         int target = m_loadedPages.size() - 1;
-        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+        if (m_readingMode == DoublePageSpread) {
             int spreadAnchor = 0;
             while (spreadAnchor < target) {
                 SpreadInfo sInfo = getSpreadInfo(spreadAnchor);
@@ -446,7 +471,7 @@ void ReaderWidget::loadOnlineChapter(const Chapter& chapter, bool startAtEnd)
 
     if (startAtEnd && !m_loadedPages.isEmpty()) {
         int target = m_loadedPages.size() - 1;
-        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+        if (m_readingMode == DoublePageSpread) {
             int spreadAnchor = 0;
             while (spreadAnchor < target) {
                 SpreadInfo sInfo = getSpreadInfo(spreadAnchor);
@@ -536,7 +561,7 @@ void ReaderWidget::displayPage(const QImage& image, int pageIndex)
     } else {
         // For Paged mode (LTR, RTL, Double Page Spread):
         SpreadInfo info = getSpreadInfo(m_currentPageIndex);
-        if (pageIndex == m_currentPageIndex || (info.secondIndex != -1 && pageIndex == info.secondIndex)) {
+        if (pageIndex == info.firstIndex || (info.secondIndex != -1 && pageIndex == info.secondIndex)) {
             updateView();
         }
     }
@@ -567,6 +592,13 @@ void ReaderWidget::updateWebtoonView()
 
 void ReaderWidget::setReadingMode(ReadingMode mode)
 {
+    // Manga double-page spreads always read right-to-left (current page on
+    // the right, next on the left) — that is how the artwork is drawn, in any
+    // reading mode. The LTR-ordered variant exists only as a legacy saved
+    // value; normalize it away so there is exactly one double-page behavior.
+    if (mode == DoublePageSpreadLeftToRight)
+        mode = DoublePageSpread;
+
     m_readingMode = mode;
 
     // Apply Mode
@@ -587,9 +619,9 @@ void ReaderWidget::setReadingMode(ReadingMode mode)
 
 void ReaderWidget::keyPressEvent(QKeyEvent *event)
 {
-    // Double page spread toggle: Shift+D, Ctrl+D, or W
-    if ((event->key() == Qt::Key_D && (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier))) ||
-        (event->key() == Qt::Key_W && event->modifiers() == Qt::NoModifier)) {
+    // Double page spread toggle: Shift+D or Ctrl+D
+    if (event->key() == Qt::Key_D &&
+        (event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier))) {
         toggleDoublePageSpread();
         return;
     }
@@ -597,12 +629,15 @@ void ReaderWidget::keyPressEvent(QKeyEvent *event)
     switch (event->key()) {
     case Qt::Key_Right:
     case Qt::Key_D:
-        if (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread) previousPage();
+        // The reading direction decides which arrow key moves forward in the
+        // page count: Right in left-to-right, Left in right-to-left — also
+        // inside double-page mode (its layout is always manga-ordered).
+        if (forwardIsLeft()) previousPage();
         else nextPage();
         break;
     case Qt::Key_Left:
     case Qt::Key_A:
-        if (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread) nextPage();
+        if (forwardIsLeft()) nextPage();
         else previousPage();
         break;
     case Qt::Key_Space:
@@ -610,6 +645,9 @@ void ReaderWidget::keyPressEvent(QKeyEvent *event)
         break;
     case Qt::Key_S:
         toggleSettingsOverlay();
+        break;
+    case Qt::Key_W:
+        cycleReadingMode();
         break;
     case Qt::Key_Up:
         previousPage();
@@ -660,16 +698,17 @@ void ReaderWidget::mousePressEvent(QMouseEvent *event)
             nextPage();
         }
     } else {
-        // Paged mode (LTR, RTL, Double)
-        bool isRTL = (m_readingMode == RightToLeft || m_readingMode == DoublePageSpread);
+        // Paged mode (LTR, RTL, Double): tap zones follow the reading
+        // direction, same as the arrow keys.
+        const bool forwardOnLeft = forwardIsLeft();
 
         if (x < w / 3) {
             // Left zone
-            if (isRTL) nextPage();
+            if (forwardOnLeft) nextPage();
             else previousPage();
         } else if (x > 2 * w / 3) {
             // Right zone
-            if (isRTL) previousPage();
+            if (forwardOnLeft) previousPage();
             else nextPage();
         }
     }
@@ -685,39 +724,38 @@ ReaderWidget::SpreadInfo ReaderWidget::getSpreadInfo(int index) const
     info.stepForward = 1;
     info.isSingle = true;
 
-    if (m_readingMode != DoublePageSpread && m_readingMode != DoublePageSpreadLeftToRight) {
+    if (m_readingMode != DoublePageSpread) {
         return info;
     }
 
-    // Cover page offset: Page 0 is kept single if enabled
+    // Pairing is anchored where the reader entered double-page mode: the
+    // current page pairs with the next one. Manga artwork spreads don't sit
+    // on a fixed chapter parity, so anchoring at the chapter start instead
+    // mirrors half of them; this way toggling while on a spread's left half
+    // always puts the halves in reading order (toggle once more from a
+    // neighbouring page to re-align if you entered a step off).
+    //
+    // Cover page offset: page 0 stays single if enabled.
     if (index == 0 && m_firstPageCover) {
-        info.isSingle = true;
-        info.stepForward = 1;
         return info;
     }
 
+    // A wide landscape page is a pre-merged spread: display alone.
     const QImage& currentImg = m_loadedPages[index];
-    // If current page is wide landscape, display alone
     if (m_autoWideDetect && !currentImg.isNull() && currentImg.width() > currentImg.height()) {
-        info.isSingle = true;
-        info.stepForward = 1;
         return info;
     }
 
-    // Try to pair with the next page
-    int nextIndex = index + 1;
+    // Try to pair with the next page.
+    const int nextIndex = index + 1;
     if (nextIndex < m_loadedPages.size()) {
         const QImage& nextImg = m_loadedPages[nextIndex];
-        // Don't pair if partner is a wide landscape image
-        if (m_autoWideDetect && !nextImg.isNull() && nextImg.width() > nextImg.height()) {
-            info.isSingle = true;
-            info.stepForward = 1;
-            return info;
+        // Don't pair if the partner is a wide landscape image.
+        if (!(m_autoWideDetect && !nextImg.isNull() && nextImg.width() > nextImg.height())) {
+            info.secondIndex = nextIndex;
+            info.stepForward = 2;
+            info.isSingle = false;
         }
-
-        info.secondIndex = nextIndex;
-        info.stepForward = 2;
-        info.isSingle = false;
     }
 
     return info;
@@ -770,7 +808,7 @@ void ReaderWidget::nextPage()
         }
     } else {
         int increment = 1;
-        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+        if (m_readingMode == DoublePageSpread) {
             SpreadInfo info = getSpreadInfo(m_currentPageIndex);
             increment = info.stepForward;
         }
@@ -863,7 +901,7 @@ void ReaderWidget::previousPage()
 
         m_showingTransition = false;
 
-        if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+        if (m_readingMode == DoublePageSpread) {
             m_currentPageIndex = getPreviousSpreadIndex(m_currentPageIndex);
         } else {
             m_currentPageIndex = qMax(0, m_currentPageIndex - 1);
@@ -880,7 +918,7 @@ void ReaderWidget::updateView()
 
     QPixmap pixmap;
 
-    if (m_readingMode == DoublePageSpread || m_readingMode == DoublePageSpreadLeftToRight) {
+    if (m_readingMode == DoublePageSpread) {
         SpreadInfo info = getSpreadInfo(m_currentPageIndex);
         if (info.firstIndex < 0 || info.firstIndex >= m_loadedPages.size()) return;
 
@@ -996,7 +1034,18 @@ void ReaderWidget::saveReadingProgress()
             Chapter chapter = m_chapterRepo->getChapterById(m_currentChapterId);
             if (chapter.id() != -1) {
                 chapter.setLastPageRead(m_currentPageIndex);
-                if (!m_loadedPages.isEmpty() && m_currentPageIndex >= m_loadedPages.size() - 1) {
+                // The chapter is read once the furthest page of the current
+                // view reaches the last page. In double-page mode the anchor
+                // index can stop short of it (the spread shows the pages
+                // beside it), so compare against the whole visible spread —
+                // otherwise a chapter ending on a spread is never marked read.
+                int lastVisibleIndex = m_currentPageIndex;
+                if (m_readingMode == DoublePageSpread) {
+                    const SpreadInfo info = getSpreadInfo(m_currentPageIndex);
+                    if (info.secondIndex > lastVisibleIndex)
+                        lastVisibleIndex = info.secondIndex;
+                }
+                if (!m_loadedPages.isEmpty() && lastVisibleIndex >= m_loadedPages.size() - 1) {
                     chapter.setIsRead(true);
                     TrackerManager::instance().updateProgress(m_currentManga.id(), static_cast<int>(chapter.chapterNumber()));
                 }
@@ -1114,29 +1163,121 @@ void ReaderWidget::toggleSettingsOverlay()
     }
 }
 
+// The paged single mode matching the user's configured default direction
+// (Settings → Default Reading Mode); LeftToRight unless they chose RTL.
+ReaderWidget::ReadingMode ReaderWidget::defaultSinglePageMode() const
+{
+    int defaultMode = PreferenceManager::instance().value("reader/default_mode", 1).toInt();
+    return (defaultMode == static_cast<int>(RightToLeft) ||
+            defaultMode == static_cast<int>(DoublePageSpread))
+               ? RightToLeft
+               : LeftToRight;
+}
+
+// The reading direction decides which arrow key (and tap zone) moves forward
+// in the page count: Right in left-to-right, Left in right-to-left. This also
+// holds inside double-page mode — its layout is always manga-ordered (current
+// page on the right), but the keys follow the direction the user chose.
+bool ReaderWidget::forwardIsLeft() const
+{
+    if (m_readingMode == RightToLeft) return true;
+    if (m_readingMode == DoublePageSpread) {
+        const ReadingMode direction =
+            m_hasModeBeforeDouble ? m_modeBeforeDouble : defaultSinglePageMode();
+        return direction == RightToLeft;
+    }
+    return false;
+}
+
+void ReaderWidget::applyReadingMode(int mode)
+{
+    ReadingMode newMode = static_cast<ReadingMode>(mode);
+
+    // Webtoon is a long strip — double page spread doesn't apply. Choosing it
+    // from webtoon falls back to the default paged direction instead.
+    if (newMode == DoublePageSpread && m_readingMode == Webtoon)
+        newMode = defaultSinglePageMode();
+
+    // Remember where the reader came from when entering double-page mode, so
+    // the Shift+D toggle can return there (and recover a manga that was saved
+    // with the opposite orientation by older builds). The double-page state is
+    // also remembered per chapter, so closing mid-chapter and reopening
+    // resumes in double-page; any other chapter starts in the base mode.
+    const bool enteringDouble = (newMode == DoublePageSpread);
+    const bool fromSingle = (m_readingMode != DoublePageSpread);
+    if (enteringDouble && fromSingle) {
+        m_modeBeforeDouble = m_readingMode;
+        m_hasModeBeforeDouble = true;
+        const bool incognito =
+            PreferenceManager::instance().value("security/incognito", false).toBool();
+        if (!incognito && m_currentChapterId > 0) {
+            PreferenceManager::instance().setValue(
+                "reader/double_page_chapter", static_cast<qlonglong>(m_currentChapterId));
+            PreferenceManager::instance().setValue(
+                "reader/double_page_return_mode", static_cast<int>(m_modeBeforeDouble));
+        }
+    } else if (!enteringDouble && m_readingMode == DoublePageSpread) {
+        // Leaving double-page mode: the chapter will reopen in the base mode.
+        PreferenceManager::instance().setValue("reader/double_page_chapter", -1);
+    }
+
+    setReadingMode(newMode);
+}
+
 void ReaderWidget::onReadingModeChanged(int mode)
 {
-    setReadingMode(static_cast<ReadingMode>(mode));
-    // Persist reading mode specifically for this manga only
-    if (m_currentManga.id() != -1) {
-        m_currentManga.setViewerFlags(mode + 1);
+    applyReadingMode(mode);
+    // Persist reading mode specifically for this manga only. Double-page is
+    // deliberately NOT persisted: it is a session-scoped view toggle, so the
+    // next chapter — auto-loaded after finishing this one or opened later —
+    // starts in the base reading direction again unless double is toggled.
+    if (m_currentManga.id() != -1 && m_readingMode != DoublePageSpread) {
+        m_currentManga.setViewerFlags(m_readingMode + 1);
         m_mangaRepo->updateManga(m_currentManga);
     }
 }
 
+// W cycles the reading modes: Webtoon → RightToLeft → LeftToRight → Webtoon —
+// the same cycle from inside double-page mode (webtoon first, since a strip
+// has no spreads; RTL is the manga default that follows).
+void ReaderWidget::cycleReadingMode()
+{
+    ReadingMode next;
+    switch (m_readingMode) {
+    case Webtoon:
+        next = RightToLeft;
+        break;
+    case DoublePageSpread:
+        next = Webtoon;
+        break;
+    case RightToLeft:
+        next = LeftToRight;
+        break;
+    case LeftToRight:
+    default:
+        next = Webtoon;
+        break;
+    }
+    onReadingModeChanged(static_cast<int>(next));
+}
+
 void ReaderWidget::toggleDoublePageSpread()
 {
-    ReadingMode newMode;
+    // Webtoon is a long strip: there is no double-page spread for it, so the
+    // toggle is a no-op there (W cycles out to webtoon instead).
+    if (m_readingMode == Webtoon) return;
+
     if (m_readingMode == DoublePageSpread) {
-        newMode = RightToLeft;
-    } else if (m_readingMode == DoublePageSpreadLeftToRight) {
-        newMode = LeftToRight;
-    } else if (m_readingMode == LeftToRight) {
-        newMode = DoublePageSpreadLeftToRight;
+        // True round trip: return to the single-page mode the reader came
+        // from. Without a remembered context (chapter restored straight into
+        // double mode — including the stale RTL double older builds saved for
+        // left-to-right mangas) fall back to the default direction, so
+        // toggling back in lands in the orientation the user actually reads.
+        onReadingModeChanged(static_cast<int>(
+            m_hasModeBeforeDouble ? m_modeBeforeDouble : defaultSinglePageMode()));
     } else {
-        newMode = DoublePageSpread;
+        onReadingModeChanged(static_cast<int>(DoublePageSpread)); // resolved by applyReadingMode
     }
-    onReadingModeChanged(static_cast<int>(newMode));
 }
 
 void ReaderWidget::onScaleTypeChanged(int type)

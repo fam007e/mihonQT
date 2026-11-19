@@ -1,5 +1,6 @@
 #include "ExtensionManagerView.h"
 #include "../source/ExtensionRepoManager.h"
+#include "UiUtils.h"
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -51,15 +52,14 @@ void ExtensionManagerView::setupUi()
     repoLayout->addWidget(addRepoBtn);
     layout->addLayout(repoLayout);
 
-    // Available list
+    // Available list — styled like every other list (token-based, so a native
+    // widget style that repaints the app still gets correct colors; the old
+    // sheet hardcoded Nord-dark background/text).
     layout->addWidget(new QLabel("Available Extensions:", this));
     m_availableList = new QListWidget(this);
     m_availableList->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_availableList, &QListWidget::customContextMenuRequested, this, &ExtensionManagerView::onCustomContextMenuRequested);
-    m_availableList->setStyleSheet(
-        "QListWidget { background-color: #2E3440; border: none; border-radius: 4px; }"
-        "QListWidget::item { padding: 10px; color: #ECEFF4; border-bottom: 1px solid #3B4252; }"
-    );
+    UiUtils::applyListWidgetStyle(m_availableList);
     layout->addWidget(m_availableList);
 
     connect(m_availableList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
@@ -175,7 +175,10 @@ void ExtensionManagerView::refreshAvailableExtensions()
                     });
                     rowLayout->addWidget(nameLabel, 1);
                     rowLayout->addWidget(trustBtn);
-                    item->setSizeHint(QSize(0, row->sizeHint().height()));
+                    // A bare size hint hugs the Trust button's own height,
+                    // which some widget styles compute tight; keep rows at a
+                    // readable minimum.
+                    item->setSizeHint(QSize(0, qMax(row->sizeHint().height(), 40)));
                     m_availableList->setItemWidget(item, row);
                 }
             }

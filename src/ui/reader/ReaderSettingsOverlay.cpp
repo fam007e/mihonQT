@@ -49,8 +49,10 @@ void ReaderSettingsOverlay::setupUi()
     m_readingModeCombo->addItem("Webtoon", 0);
     m_readingModeCombo->addItem("Left to Right", 1);
     m_readingModeCombo->addItem("Right to Left", 2);
+    // One "Double Page" option: the reader resolves it to the double-page
+    // mode matching the current reading direction (see
+    // ReaderWidget::resolveDoublePageMode). The LTR variant is internal only.
     m_readingModeCombo->addItem("Double Page", 3);
-    m_readingModeCombo->addItem("Double Page (Left to Right)", 4);
     connect(m_readingModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
         int mode = m_readingModeCombo->itemData(index).toInt();
         updateDoublePageControlsVisibility(mode);
@@ -183,7 +185,9 @@ void ReaderSettingsOverlay::updateDoublePageControlsVisibility(int mode)
 void ReaderSettingsOverlay::setCurrentReadingMode(int mode)
 {
     m_readingModeCombo->blockSignals(true);
-    int index = m_readingModeCombo->findData(mode);
+    // The LTR double-page variant has no combo entry of its own — it shares
+    // the single "Double Page" item (data 3).
+    int index = m_readingModeCombo->findData(mode == 4 ? 3 : mode);
     if (index >= 0) m_readingModeCombo->setCurrentIndex(index);
     m_readingModeCombo->blockSignals(false);
     updateDoublePageControlsVisibility(mode);
