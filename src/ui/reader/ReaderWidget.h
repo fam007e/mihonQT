@@ -30,8 +30,11 @@ public:
         Webtoon,
         LeftToRight,
         RightToLeft,
-        DoublePageSpread, // Right-to-Left Double Page
-        DoublePageSpreadLeftToRight // Left-to-Right Double Page
+        DoublePageSpread, // Double page, manga-ordered: current page on the
+                          // right, next on the left — always, in any reading
+                          // mode (manga artwork reads right-to-left)
+        DoublePageSpreadLeftToRight // Legacy persisted value only; normalized
+                                    // to DoublePageSpread on apply
     };
     Q_ENUM(ReadingMode)
 
@@ -73,6 +76,10 @@ signals:
 public slots:
     void displayPage(const QImage& image, int pageIndex);
     void toggleDoublePageSpread();
+    // Applies a mode selection from UI paths whose "Double Page" carries no
+    // direction (settings default, overlay combo); resolves it against the
+    // current reading context. Does not write the manga's saved mode.
+    void applyReadingMode(int mode);
 
 private:
     void clearChapterContent();
@@ -86,6 +93,14 @@ private:
     void previousPage();
     void saveReadingProgress();
     void onReadingModeChanged(int mode);
+    ReadingMode defaultSinglePageMode() const;
+    bool forwardIsLeft() const;
+    void cycleReadingMode();
+    // The single-page mode the reader was in before entering double-page
+    // mode, so Shift+D is a true round trip (and heals a manga saved with
+    // the opposite double-page orientation from older builds).
+    ReadingMode m_modeBeforeDouble = LeftToRight;
+    bool m_hasModeBeforeDouble = false;
     void onScaleTypeChanged(int type);
     void onFirstPageCoverChanged(bool enabled);
     void onAutoWideDetectChanged(bool enabled);

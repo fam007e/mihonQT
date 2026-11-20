@@ -177,16 +177,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_settingsView, &SettingsView::backRequested, this, &MainWindow::onBackRequested);
     connect(m_settingsView, &SettingsView::incognitoChanged, this, &MainWindow::onIncognitoChanged);
     connect(m_settingsView, &SettingsView::localMangaPathChanged, this, &MainWindow::onLocalMangaPathChanged);
-    connect(m_settingsView, &SettingsView::readingModeChanged, this, [this](int index) {
-        // 0: Webtoon, 1: L2R, 2: R2L
-        ReaderWidget::ReadingMode mode;
-        switch (index) {
-            case 0: mode = ReaderWidget::Webtoon; break;
-            case 1: mode = ReaderWidget::LeftToRight; break;
-            case 2: mode = ReaderWidget::RightToLeft; break;
-            default: mode = ReaderWidget::Webtoon; break;
-        }
-        m_readerWidget->setReadingMode(mode);
+    connect(m_settingsView, &SettingsView::readingModeChanged, this, [this](int value) {
+        // 0: Webtoon, 1: L2R, 2: R2L, 3: Double Page (direction resolved by
+        // the reader). applyReadingMode also keeps the open reader in sync
+        // without stamping this default onto the manga's saved mode.
+        m_readerWidget->applyReadingMode(value);
     });
 
     connect(m_statisticsView, &StatisticsView::backRequested, this, &MainWindow::onBackRequested);
@@ -302,26 +297,35 @@ void MainWindow::setupUi()
     QAction *tokyoNightAction = themeMenu->addAction("Tokyo Night");
     QAction *draculaAction = themeMenu->addAction("Dracula");
 
-    connect(mihonDefaultAction, &QAction::triggered, this, []() {
-        ThemeManager::instance().applyTheme(ThemeManager::MihonDefault);
+    // Choosing a Material theme here means the user wants the Material look,
+    // so leave any native widget style first (it would ignore the theme).
+    auto applyMaterialTheme = [](ThemeManager::Theme theme) {
+        ThemeManager::instance().setNativeStyle(QString());
+        ThemeManager::instance().applyTheme(theme);
+    };
+    connect(mihonDefaultAction, &QAction::triggered, this, [applyMaterialTheme]() {
+        applyMaterialTheme(ThemeManager::MihonDefault);
     });
-    connect(nordDarkAction, &QAction::triggered, this, []() {
-        ThemeManager::instance().applyTheme(ThemeManager::NordDark);
+    connect(nordDarkAction, &QAction::triggered, this, [applyMaterialTheme]() {
+        applyMaterialTheme(ThemeManager::NordDark);
     });
-    connect(nordLightAction, &QAction::triggered, this, []() {
-        ThemeManager::instance().applyTheme(ThemeManager::NordLight);
+    connect(nordLightAction, &QAction::triggered, this, [applyMaterialTheme]() {
+        applyMaterialTheme(ThemeManager::NordLight);
     });
-    connect(catppuccinAction, &QAction::triggered, this, []() {
-        ThemeManager::instance().applyTheme(ThemeManager::CatppuccinMocha);
+    connect(catppuccinAction, &QAction::triggered, this, [applyMaterialTheme]() {
+        applyMaterialTheme(ThemeManager::CatppuccinMocha);
     });
-    connect(tokyoNightAction, &QAction::triggered, this, []() {
-        ThemeManager::instance().applyTheme(ThemeManager::TokyoNight);
+    connect(tokyoNightAction, &QAction::triggered, this, [applyMaterialTheme]() {
+        applyMaterialTheme(ThemeManager::TokyoNight);
     });
-    connect(draculaAction, &QAction::triggered, this, []() {
-        ThemeManager::instance().applyTheme(ThemeManager::Dracula);
+    connect(draculaAction, &QAction::triggered, this, [applyMaterialTheme]() {
+        applyMaterialTheme(ThemeManager::Dracula);
     });
 
-    // Apply default theme (Mihon Default, matching the Android app)
+    // Restore the persisted widget-style choice (Material by default), then
+    // apply the default theme (Mihon Default, matching the Android app). In a
+    // native widget style the theme palette is not used, see ThemeManager.h.
+    ThemeManager::instance().loadSavedStyle();
     ThemeManager::instance().applyTheme(ThemeManager::MihonDefault);
 
     // Re-style every UiUtils-styled list when the theme changes (views
@@ -611,6 +615,10 @@ void MainWindow::onBackRequested()
     if (m_rootStack->currentWidget() == m_readerWidget) {
         // Back from Reader -> Dashboard (shows last content)
         m_rootStack->setCurrentWidget(m_dashboardWidget);
+        // Reading updates chapter read state and progress in the database;
+        // refresh the details view so the chapter list reflects it at once.
+        if (m_contentStack->currentWidget() == m_mangaDetailsView)
+            m_mangaDetailsView->refreshChapters();
     } else {
         // We are in Dashboard. Check Content Stack.
         int currentIdx = m_contentStack->currentIndex();

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 # Check if version is provided from command line (for releases)
 if(NOT DEFINED PROJECT_VERSION)
-    set(PROJECT_VERSION "0.3.0")
+    set(PROJECT_VERSION "0.4.0")
 endif()
 
 project(MihonQT VERSION ${PROJECT_VERSION} LANGUAGES CXX)
@@ -197,6 +197,29 @@ if(BUILD_TESTS)
         resources.qrc
     )
     add_mihon_test(test_spread_logic tests/test_spread_logic.cpp)
+    add_mihon_test(test_theme_style tests/test_theme_style.cpp
+        src/ui/ThemeManager.cpp
+        src/config/PreferenceManager.cpp
+    )
+    add_mihon_test(test_more_view_focus tests/test_more_view_focus.cpp
+        src/ui/MoreView.cpp
+        src/ui/ThemeManager.cpp
+        src/config/PreferenceManager.cpp
+    )
+    add_mihon_test(test_statistics_view tests/test_statistics_view.cpp
+        src/ui/StatisticsView.cpp
+        src/ui/ThemeManager.cpp
+        src/config/PreferenceManager.cpp
+        src/database/DatabaseManager.cpp
+        src/database/MangaRepository.cpp
+        src/database/ChapterRepository.cpp
+        src/database/CategoryRepository.cpp
+        src/database/HistoryRepository.cpp
+        src/model/Manga.cpp
+        src/model/Chapter.cpp
+        src/model/Category.cpp
+        resources.qrc
+    )
 endif()
 
 # --- Fuzzers (libFuzzer) ---

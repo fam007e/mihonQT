@@ -11,6 +11,19 @@
 #include <QScrollArea>
 #include <QUrl>
 
+// Row hover/press colors derive from tokens; re-applied on theme change so
+// they stay legible when the palette flips (native widget styles derive the
+// tokens from the desktop palette, which may be light or dark).
+static QString buttonRowStyleSheet(const M3Colors &c) {
+  return QStringLiteral(
+             "QPushButton { background-color: transparent; border: none; "
+             "padding: 12px 20px; text-align: left; }"
+             "QPushButton:hover, QPushButton:focus { background-color: %1; }"
+             "QPushButton:pressed { background-color: %2; }")
+      .arg(ThemeManager::rgba(c.onSurface, 0.08f),
+           ThemeManager::rgba(c.onSurface, 0.14f));
+}
+
 MoreView::MoreView(QWidget *parent) : QWidget(parent) {
   setupUi();
   connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
@@ -101,7 +114,9 @@ void MoreView::setupUi() {
   addActionItem(":/icons/help.svg", "Help", "",
                 [this]() { emit helpRequested(); });
   addActionItem(":/icons/public.svg", "Donate", "", [this]() {
-    QDesktopServices::openUrl(QUrl("https://mihon.app/donate/"));
+    // Explains that MihonQT has no donation setup of its own and points at
+    // Mihon instead — see docs/DONATE.md on the project website.
+    QDesktopServices::openUrl(QUrl("https://fam007e.github.io/mihonQT/DONATE.html"));
   });
 
   scrollArea->setWidget(scrollContent);
@@ -115,15 +130,8 @@ void MoreView::addActionItem(const QString &iconPath, const QString &title,
   QPushButton *btn = new QPushButton(scrollContent);
   m_rowWidgets.append(btn);
   btn->installEventFilter(this);
-  const M3Colors &rc = ThemeManager::instance().colors();
   btn->setStyleSheet(
-      QStringLiteral(
-      "QPushButton { background-color: transparent; border: none; padding: "
-      "12px 20px; text-align: left; }"
-      "QPushButton:hover, QPushButton:focus { background-color: %1; }"
-      "QPushButton:pressed { background-color: %2; }")
-      .arg(ThemeManager::rgba(rc.onSurface, 0.08f),
-           ThemeManager::rgba(rc.onSurface, 0.14f)));
+      buttonRowStyleSheet(ThemeManager::instance().colors()));
 
   QHBoxLayout *hLayout = new QHBoxLayout(btn);
   hLayout->setContentsMargins(0, 0, 0, 0);
@@ -194,7 +202,12 @@ QCheckBox *MoreView::addToggleItem(const QString &iconPath,
   toggle->setCursor(Qt::PointingHandCursor);
   toggle->setStyleSheet(
       "QCheckBox { background: transparent; }"
-      "QCheckBox::indicator { width: 48px; height: 28px; }"
+      // Own the whole indicator box (size, border, background). With only an
+      // image, QStyleSheetStyle leaves the box to the base style: native
+      // styles paint a checkbox square behind the SVG, and the Material
+      // global sheet draws its 2px outline box around it.
+      "QCheckBox::indicator { width: 48px; height: 28px; border: none;"
+      "  background: transparent; }"
       "QCheckBox::indicator:unchecked { image: url(:/icons/toggle_off.svg); }"
       "QCheckBox::indicator:checked { image: url(:/icons/toggle_on.svg); }");
 
@@ -270,8 +283,14 @@ void MoreView::keyPressEvent(QKeyEvent *event)
 
 bool MoreView::eventFilter(QObject *watched, QEvent *event)
 {
-    // Full-row highlight for keyboard focus (toggle rows are plain QWidgets)
+    // Full-row highlight for keyboard focus (toggle rows are plain QWidgets).
+    // Button rows already declare QPushButton:focus in their own stylesheet;
+    // replacing it here dropped their `border: none`, which only the Material
+    // global stylesheet masked. In a native style every focused row then grew
+    // a visible button frame.
     if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut) {
+        if (qobject_cast<QPushButton *>(watched))
+            return false;
         if (QWidget *w = qobject_cast<QWidget *>(watched)) {
             const M3Colors &c = ThemeManager::instance().colors();
             const bool focused = event->type() == QEvent::FocusIn;
@@ -406,5 +425,13 @@ void MoreView::updateThemeColors() {
         QString("font-size: 14px; font-weight: 800; color: %1; background: "
                 "transparent; margin-top: -3px;")
             .arg(textColor));
+  }
+
+  // Button rows baked their hover/press colors at construction; refresh them.
+  // (Toggle rows are plain QWidgets with token-free sheets, and their focus
+  // highlight already reads live tokens in the eventFilter.)
+  for (QWidget *row : m_rowWidgets) {
+    if (QPushButton *btn = qobject_cast<QPushButton *>(row))
+      btn->setStyleSheet(buttonRowStyleSheet(c));
   }
 }

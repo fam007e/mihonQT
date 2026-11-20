@@ -1,6 +1,6 @@
 # Roadmap: Porting Mihon to Qt for Desktop (macOS, Linux, Windows)
 
-This document outlines the progress of porting Mihon to a cross-platform desktop application using Qt 6. Last updated: 2026-11-16, for the v0.3.0-alpha release.
+This document outlines the progress of porting Mihon to a cross-platform desktop application using Qt 6. Last updated: 2026-11-20, for the v0.4.0-alpha release.
 
 ## 🏁 Current Status: Alpha
 All core logic and the main UI are implemented and functional. Prebuilt binaries for Linux, Windows and macOS are published on GitHub Releases.
@@ -21,7 +21,7 @@ All core logic and the main UI are implemented and functional. Prebuilt binaries
 - [x] Manga Details Screen (Mihon-style header, chapter rows, chapter filter menu, HTML synopsis cleaning)
 - [x] Multi-Chapter Selection & Management (batch mark as read/unread, bookmark, Shift+Click range selection, "Mark previous chapters as read")
 - [x] Improved Reader (tap zones, keyboard shortcuts, immediate focus)
-- [x] Double-Page Spread (cover offset, wide-page detection, dynamic stepping, hotkey toggle via W / Shift+D / Ctrl+D)
+- [x] Double-Page Spread (cover offset, wide-page detection, dynamic stepping, manga-ordered spreads toggled via Shift+D / Ctrl+D, remembered per chapter)
 - [x] Per-Manga Viewing Mode (manga-specific reading mode persistence)
 - [x] Dynamic Grid Tiles (word-wrapping and elision based on font metrics)
 - [x] Material 3 Theming (Mihon Default, Nord, Catppuccin, Tokyo Night, Dracula + AMOLED)
@@ -42,7 +42,8 @@ All core logic and the main UI are implemented and functional. Prebuilt binaries
 ## 🚧 Phase 4: Advanced Features & Deployment
 **Status: In Progress**
 - [x] Extension Repository System (external repo support; default repo is the generated `repo-qt` branch of [fam007e/extensions-source](https://github.com/fam007e/extensions-source/tree/repo-qt) — JS sources + index.min.json built by CI, seeded with WeebCentral, Toonily, ManhuaUS, HiperDex, Webtoons.com, MangaDex)
-- [x] Statistics Dashboard
+- [x] Statistics Dashboard (library overview, reading state, activity from reading history, outside-library tracking)
+- [x] Native Widget Style Support (System default, Breeze, Oxygen, Kvantum, Fusion — issue #17)
 - [x] Backup & Restore
 - [x] CI/CD Pipeline (Windows, Linux, macOS matrix)
 - [x] Release Pipeline (tagged builds with per-platform artifacts — Linux standalone binary, AppImage, deb, rpm, pkg.tar.zst; Windows bundle zip; macOS dmg)

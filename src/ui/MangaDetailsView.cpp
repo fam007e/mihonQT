@@ -301,13 +301,16 @@ protected:
     {
         QWidget::paintEvent(e);
         if (m_selectionMode && isSelected()) {
+            // Fill the same rounded rect as the outline — a plain fillRect
+            // would bleed past the rounded corners.
             QPainter p(this);
             p.setRenderHint(QPainter::Antialiasing);
-            p.fillRect(rect(), ThemeManager::rgba(ThemeManager::instance().colors().primary, 0.18f));
-            QPen pen(ThemeManager::instance().colors().primary);
-            pen.setWidthF(1.5);
-            p.setPen(pen);
-            p.drawRoundedRect(rect().adjusted(8, 2, -8, -2), 8, 8);
+            const QRectF box = QRectF(rect()).adjusted(8, 2, -8, -2);
+            QColor fill = ThemeManager::instance().colors().primary;
+            fill.setAlphaF(0.18f);
+            p.setPen(QPen(ThemeManager::instance().colors().primary, 1.5));
+            p.setBrush(fill);
+            p.drawRoundedRect(box, 8, 8);
         } else if (hasFocus()) {
             QPainter p(this);
             p.setRenderHint(QPainter::Antialiasing);
@@ -924,6 +927,9 @@ void MangaDetailsView::refreshChapters()
         row->onMarkUnread = [this](const Chapter& ch) {
             Chapter copy = ch;
             copy.setIsRead(false);
+            // Unread means unread from the start: drop the saved page so
+            // reopening the chapter begins at page 1.
+            copy.setLastPageRead(0);
             DatabaseManager::instance().chapterRepository().updateChapter(copy);
             refreshChapters();
         };
@@ -1013,11 +1019,11 @@ void MangaDetailsView::markSelectedAsRead(bool markAsRead)
         if (row->isSelected()) {
             Chapter ch = row->chapter();
             ch.setIsRead(markAsRead);
-            if (markAsRead) {
-                ch.setLastPageRead(0);
-                if (ch.chapterNumber() > maxCh) {
-                    maxCh = static_cast<int>(ch.chapterNumber());
-                }
+            // Both directions reset the saved page: read restarts tracking at
+            // the chapter boundary, unread restarts at page 1 on reopen.
+            ch.setLastPageRead(0);
+            if (markAsRead && ch.chapterNumber() > maxCh) {
+                maxCh = static_cast<int>(ch.chapterNumber());
             }
             repo.updateChapter(ch);
         }

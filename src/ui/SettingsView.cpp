@@ -254,9 +254,32 @@ void SettingsView::createAppearancePage() {
     ThemeManager::instance().setAmoledMode(checked);
   });
 
+  // Widget style: Material (default), the desktop's own style, or any
+  // installed QStyle (Breeze, Oxygen, Kvantum, Fusion, ...). Listed from
+  // QStyleFactory so only styles that are actually installed appear.
+  QLabel *styleLabel = new QLabel("Widget Style:", this);
+  m_styleComboBox = new QComboBox(this);
+  m_styleComboBox->addItem("Material (app theme)", QString());
+  m_styleComboBox->addItem("System default", ThemeManager::SystemStyleKey);
+  for (const QString &key : ThemeManager::availableNativeStyles())
+    m_styleComboBox->addItem(key, key);
+  QLabel *styleHint = new QLabel(
+      "Native styles replace the Material look. The app theme and Pure Black "
+      "do not apply while one is selected.", this);
+  styleHint->setWordWrap(true);
+  syncStyleControls();
+  connect(m_styleComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &SettingsView::onStyleChanged);
+  // Keep the controls truthful when the style changes elsewhere (Theme menu).
+  connect(&ThemeManager::instance(), &ThemeManager::themeChanged, this,
+          &SettingsView::syncStyleControls);
+
   themeLayout->addWidget(themeLabel);
   themeLayout->addWidget(m_themeComboBox);
   themeLayout->addWidget(m_pureBlackCheckBox);
+  themeLayout->addWidget(styleLabel);
+  themeLayout->addWidget(m_styleComboBox);
+  themeLayout->addWidget(styleHint);
   layout->addWidget(themeGroup);
 
   // Display Group
@@ -1210,6 +1233,28 @@ void SettingsView::onThemeChanged(int index) {
   const QVariant data = m_themeComboBox->itemData(index);
   if (!data.isValid()) return;
   ThemeManager::instance().applyTheme(static_cast<ThemeManager::Theme>(data.toInt()));
+}
+
+void SettingsView::onStyleChanged(int index) {
+  if (index < 0) return;
+  ThemeManager::instance().setNativeStyle(m_styleComboBox->itemData(index).toString());
+}
+
+void SettingsView::syncStyleControls() {
+  if (!m_styleComboBox) return;
+  ThemeManager &tm = ThemeManager::instance();
+
+  const int idx = m_styleComboBox->findData(tm.nativeStyle());
+  if (idx >= 0 && idx != m_styleComboBox->currentIndex()) {
+    // Reflect state only; do not feed it back into ThemeManager.
+    const QSignalBlocker blocker(m_styleComboBox);
+    m_styleComboBox->setCurrentIndex(idx);
+  }
+
+  // The Material theme list and AMOLED toggle have no effect in native mode.
+  const bool material = !tm.isNativeStyle();
+  m_themeComboBox->setEnabled(material);
+  m_pureBlackCheckBox->setEnabled(material);
 }
 
 void SettingsView::onReadingModeChanged(int index) {

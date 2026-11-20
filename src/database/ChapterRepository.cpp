@@ -92,9 +92,14 @@ int ChapterRepository::getUnreadCountByMangaId(long mangaId)
     return 0;
 }
 
+// Statistics count the LIBRARY only: opening a manga from browse syncs its
+// chapters into the table too, so a bare COUNT(*) would inflate the numbers
+// with chapters of mangas the user never added.
 int ChapterRepository::getTotalChapterCount()
 {
-    QSqlQuery query("SELECT COUNT(*) FROM chapters");
+    QSqlQuery query(
+        "SELECT COUNT(*) FROM chapters c "
+        "JOIN mangas m ON c.manga_id = m._id WHERE m.favorite = 1");
     if (query.exec() && query.next()) {
         return query.value(0).toInt();
     }
@@ -103,7 +108,9 @@ int ChapterRepository::getTotalChapterCount()
 
 int ChapterRepository::getReadChapterCount()
 {
-    QSqlQuery query("SELECT COUNT(*) FROM chapters WHERE read = 1"); // flawfinder: ignore
+    QSqlQuery query(
+        "SELECT COUNT(*) FROM chapters c "
+        "JOIN mangas m ON c.manga_id = m._id WHERE m.favorite = 1 AND c.read = 1"); // flawfinder: ignore
     if (query.exec() && query.next()) {
         return query.value(0).toInt();
     }

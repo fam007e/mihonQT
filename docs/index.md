@@ -13,6 +13,7 @@ Welcome to the official documentation for MihonQT, a cross-platform desktop mang
 - **[JavaScript Extensions](wiki/Extensions.html)** - Writing manga sources for MihonQT.
 - **[Themes](wiki/Themes.html)** - Shipped Material 3 themes and the token system.
 - **[Frequently Asked Questions (FAQ)](FAQ.html)** - Common questions and troubleshooting tips.
+- **[Support / Donate](DONATE.html)** - How to support MihonQT and Mihon.
 - **[Security Audit](SECURITY_AUDIT.html)** - Detailed analysis of the project's security posture.
 - **[Static Analysis](CPPCHECK.html)** - CppCheck configuration and usage.
 - **[GitHub Wiki](https://github.com/fam007e/mihonQT/wiki)** - Mirror of these pages.
@@ -24,7 +25,9 @@ MihonQT aims to bring the best features of the Mihon Android app to the desktop,
 
 ### Key Features
 - **Material 3 Inspired UI:** A modern interface consistent with Tachiyomi/Mihon Android.
-- **Double-Page Spread Reader:** Cover offset, wide-page detection, RTL/LTR/vertical modes.
+- **Double-Page Spread Reader:** Always manga-ordered spreads (current page on the right, next on the left) with cover offset and wide-page detection; RTL/LTR/webtoon modes where the reading direction decides which arrow key moves forward.
+- **Native Widget Styles:** Run the app with your desktop's own Qt style (Breeze, Kvantum, Fusion, System default) or the built-in Material look.
+- **Statistics Dashboard:** Library overview (read/unread), reading state (started/completed), recent activity (last 7/30 days) and outside-library tracking of browsed content.
 - **Full Keyboard Navigation:** Rail-focused hub-and-spoke navigation with Esc/Enter/arrows.
 - **Tracking Services Integration:** Full OAuth sync for **AniList**, **MyAnimeList (MAL)**, and **MangaUpdates (Baka-Updates)** with automatic progress update, ratings (`★ 0.0 - 10.0`), and library pre-fill.
 - **Batch Chapter Management:** Range selection with <kbd>Shift</kbd> + Click, one-click "Mark previous chapters as read" (keeps target chapter unread so you can read it immediately), and bulk download/bookmarking.

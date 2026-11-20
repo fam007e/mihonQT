@@ -151,6 +151,19 @@ void LibraryView::restyle()
     m_emptyLabel->setStyleSheet(
         QStringLiteral("color: %1; font-size: 14px; padding: 60px; background: transparent;")
             .arg(c.onSurfaceVariant.name()));
+    // The Mihon tab row (flat chips, primary underline) is normally painted
+    // by the Material global stylesheet. A native widget style (Breeze,
+    // Kvantum, ...) draws document tabs instead — centered text in tab
+    // shapes — so keep the Mihon look here with a per-widget rule. In
+    // Material mode it duplicates the global rule and is harmless.
+    m_categoryTabs->setStyleSheet(
+        QStringLiteral(
+            "QTabBar { background: transparent; }"
+            "QTabBar::tab { background: transparent; color: %1; padding: 10px 18px;"
+            "  border: none; border-bottom: 3px solid transparent; font-weight: 500; }"
+            "QTabBar::tab:selected { color: %2; border-bottom-color: %3; }"
+            "QTabBar::tab:hover { color: %2; }")
+            .arg(c.onSurfaceVariant.name(), c.onBackground.name(), c.primary.name()));
 }
 
 void LibraryView::refreshLibrary()

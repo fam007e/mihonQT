@@ -24,6 +24,9 @@ MihonQT is a desktop manga reader built with C++ and Qt 6 — a native port of
 the [Mihon](https://github.com/mihonapp/mihon) (formerly Tachiyomi) Android
 experience for Linux, Windows and macOS.
 
+> **MihonQT is an independent community project.** It is not affiliated with,
+> endorsed by, or connected to the Mihon or Tachiyomi development teams.
+
 ## ✨ Features
 
 - **📚 Library Management:** Categories, unread and download badges, filters,
@@ -37,14 +40,21 @@ experience for Linux, Windows and macOS.
 - **🌐 JavaScript Extensions:** Manga sources as plain JS files with
   HTML5-correct parsing (Gumbo) and a full CSS selector engine, executed off
   the UI thread.
-- **📖 Dual-Page Reader:** Cover offset, wide-page (splash) detection,
-  RTL/LTR/vertical (webtoon) modes, page slider and per-chapter navigation.
+- **📖 Dual-Page Reader:** Always manga-ordered spreads (current page on the
+  right, next on the left) with cover offset and wide-page (splash) detection;
+  toggled per chapter with `Shift+D` and remembered per chapter. RTL/LTR/
+  webtoon modes where the reading direction decides which arrow key moves
+  forward, plus a page slider and per-chapter navigation.
 - **⌨️ Full Keyboard Navigation:** Rail-focused hub-and-spoke navigation with
   arrows, Enter and Esc throughout the app.
-- **🎨 Material 3 Theming:** The Mihon Android palettes (Mihon Default, Nord,
-  Catppuccin, Tokyo Night, Dracula) plus a Pure Black AMOLED mode.
+- **🎨 Material 3 Theming & Native Widget Styles:** The Mihon Android palettes
+  (Mihon Default, Nord, Catppuccin, Tokyo Night, Dracula), a Pure Black AMOLED
+  mode — or run the app with your desktop's own Qt style (Breeze, Kvantum,
+  Fusion, System default).
 - **📥 Download Manager:** Multi-threaded chapter downloads with a queue UI.
-- **📊 Statistics:** Insights into your reading habits.
+- **📊 Statistics Dashboard:** Library overview (read/unread), reading state
+  (started/completed), recent activity (last 7/30 days) and outside-library
+  tracking of browsed content.
 - **🕶️ Incognito Mode:** Pause history tracking with a single toggle.
 - **🔒 Secure by Design:** Incorporates mitigations from the 2026 security
   audit (extension trust, HTTPS enforcement, memory-safety hardening).
@@ -85,6 +95,7 @@ Prebuilt binaries for Linux, Windows and macOS are published on the
 | [JavaScript Extensions](docs/wiki/Extensions.md) | Writing manga sources |
 | [Themes](docs/wiki/Themes.md) | Shipped Material 3 palettes and AMOLED |
 | [FAQ](https://fam007e.github.io/mihonQT/FAQ.html) | Common questions |
+| [Support / Donate](https://fam007e.github.io/mihonQT/DONATE.html) | How to support MihonQT and Mihon |
 | [Security Audit](docs/SECURITY_AUDIT.md) | Security posture and mitigations |
 
 ## 🔒 Privacy

@@ -1,5 +1,12 @@
 #include "ThemeManager.h"
+#include "config/PreferenceManager.h"
+#include <QDebug>
+#include <QProxyStyle>
+#include <QStyle>
 #include <QStyleFactory>
+#include <QWidget>
+
+const QString ThemeManager::SystemStyleKey = QStringLiteral("system");
 
 // ============================================================
 // Color schemes — ported 1:1 from Mihon Android
@@ -220,6 +227,14 @@ ThemeManager::ThemeManager(QObject *parent) : QObject(parent)
     // produced black-on-black selected items in History/Settings.
     m_colors = mihonDefaultDark();
     m_isDark = true;
+
+    // Remember what Qt picked for this desktop before we override anything
+    // (platform theme, -style, QT_STYLE_OVERRIDE) so "System default" can
+    // restore it later.
+    if (qApp) {
+        m_systemStyleName = QApplication::style()->name();
+        m_systemPalette = QApplication::palette();
+    }
 }
 
 ThemeManager& ThemeManager::instance()
@@ -252,9 +267,166 @@ QString ThemeManager::rgba(const QColor& c, float alpha)
     return a.name(QColor::HexArgb);
 }
 
+QStringList ThemeManager::availableNativeStyles()
+{
+    return QStyleFactory::keys();
+}
+
+// Maps a persisted/requested key to a valid one: "" (Material), the system
+// key, or the exact QStyleFactory spelling. Unknown styles (e.g. a plugin that
+// has since been uninstalled) fall back to Material.
+static QString normalizeStyleKey(const QString& requested)
+{
+    const QString key = requested.trimmed();
+    if (key.isEmpty())
+        return QString();
+    if (key.compare(ThemeManager::SystemStyleKey, Qt::CaseInsensitive) == 0)
+        return ThemeManager::SystemStyleKey;
+
+    const QStringList keys = QStyleFactory::keys();
+    for (const QString& k : keys) {
+        if (k.compare(key, Qt::CaseInsensitive) == 0)
+            return k;
+    }
+    qWarning() << "ThemeManager: widget style" << key << "is not installed; using Material";
+    return QString();
+}
+
+void ThemeManager::loadSavedStyle()
+{
+    m_nativeStyle = normalizeStyleKey(
+        PreferenceManager::instance().value("theme/style").toString());
+}
+
+void ThemeManager::setNativeStyle(const QString& styleKey)
+{
+    const QString normalized = normalizeStyleKey(styleKey);
+    if (normalized == m_nativeStyle) return;
+
+    m_nativeStyle = normalized;
+    PreferenceManager::instance().setValue("theme/style", m_nativeStyle);
+    applyTheme(m_currentTheme);
+}
+
+// Some widget styles (notably Kvantum themes with popup translucency) leave
+// the combobox dropdown container without an opaque background, so the popup
+// renders against whatever happens to be behind it. A stylesheet can't fix
+// that here: any non-empty application stylesheet makes Qt wrap every widget
+// in QStyleSheetStyle, which would defeat the native style entirely. A
+// QProxyStyle can instead force the one affected popup container opaque while
+// forwarding everything else to the real style untouched.
+class PopupOpacityProxyStyle : public QProxyStyle
+{
+public:
+    using QProxyStyle::QProxyStyle;
+
+    void polish(QWidget *widget) override
+    {
+        QProxyStyle::polish(widget);
+        if (qstrcmp(widget->metaObject()->className(), "QComboBoxPrivateContainer") != 0)
+            return;
+        widget->setAttribute(Qt::WA_TranslucentBackground, false);
+        widget->setAutoFillBackground(true);
+        QPalette pal = widget->palette();
+        // Themes that ask for translucent popups do it through translucent
+        // palette colors; make the container's own colors opaque so there is
+        // always a painted surface under the style's decoration.
+        for (QPalette::ColorRole role : { QPalette::Window, QPalette::Base }) {
+            QColor color = pal.color(role);
+            color.setAlpha(255);
+            pal.setColor(role, color);
+        }
+        widget->setPalette(pal);
+    }
+};
+
+void ThemeManager::applyNativeStyle()
+{
+    // The Material stylesheet is application-wide and paints every widget
+    // itself; the QStyle below would never be consulted while it is set. It
+    // has to go completely — even a tiny leftover app stylesheet wraps all
+    // widgets in QStyleSheetStyle (see PopupOpacityProxyStyle above).
+    qApp->setStyleSheet(QString());
+
+    const QString factoryKey = (m_nativeStyle == SystemStyleKey) ? m_systemStyleName : m_nativeStyle;
+    QStyle *style = QStyleFactory::create(factoryKey);
+    if (!style) {
+        qWarning() << "ThemeManager: could not create widget style" << factoryKey << "- using Fusion";
+        style = QStyleFactory::create("Fusion");
+    }
+
+    // QStyle::name() is non-virtual — it reads objectName. Name the proxy
+    // after the key we chose so the applied style reports it (plugin styles
+    // such as qt6ct-style otherwise come back unnamed).
+    PopupOpacityProxyStyle *proxy = new PopupOpacityProxyStyle(style);
+    proxy->setObjectName(factoryKey);
+
+    // Palette first, style second: a style can adjust the palette it is given
+    // (QStyle::polish(QPalette&)), and Kvantum relies on that for its colors.
+    qApp->setPalette(m_systemPalette);
+    qApp->setStyle(proxy);
+
+    // Per-widget stylesheets elsewhere in the UI still read M3 tokens; derive
+    // them from the live palette so they stay coherent with the native look.
+    setTokensFromPalette(qApp->palette());
+}
+
+void ThemeManager::setTokensFromPalette(const QPalette& pal)
+{
+    const QColor window = pal.color(QPalette::Window);
+    const QColor windowText = pal.color(QPalette::WindowText);
+    const QColor base = pal.color(QPalette::Base);
+    const QColor button = pal.color(QPalette::Button);
+    const QColor highlight = pal.color(QPalette::Highlight);
+    const QColor highlightedText = pal.color(QPalette::HighlightedText);
+    const bool dark = window.lightness() < 128;
+
+    M3Colors c;
+    c.primary = highlight;               c.onPrimary = highlightedText;
+    c.primaryContainer = highlight;      c.onPrimaryContainer = highlightedText;
+    c.secondary = highlight;             c.onSecondary = highlightedText;
+    c.secondaryContainer = highlight;    c.onSecondaryContainer = highlightedText;
+    // Badge colors have no palette equivalent; keep Mihon's green.
+    c.tertiary = dark ? QColor(0x7ADC77) : QColor(0x006E1B);
+    c.onTertiary = dark ? QColor(0x003909) : QColor(0xFFFFFF);
+    c.tertiaryContainer = dark ? QColor(0x005312) : QColor(0x95F990);
+    c.onTertiaryContainer = dark ? QColor(0x95F990) : QColor(0x002203);
+
+    c.background = window;               c.onBackground = windowText;
+    c.surface = window;                  c.onSurface = windowText;
+    c.surfaceVariant = button;
+    c.onSurfaceVariant = pal.color(QPalette::PlaceholderText);
+    c.surfaceContainerLowest = base;
+    c.surfaceContainerLow = base;
+    c.surfaceContainer = window;
+    c.surfaceContainerHigh = button;
+    c.surfaceContainerHighest = dark ? button.lighter(115) : button.darker(105);
+
+    c.outline = pal.color(QPalette::Mid);
+    c.outlineVariant = pal.color(QPalette::Midlight);
+
+    c.error = dark ? QColor(0xFFB4AB) : QColor(0xBA1A1A);
+    c.onError = dark ? QColor(0x690005) : QColor(0xFFFFFF);
+    c.errorContainer = dark ? QColor(0x93000A) : QColor(0xFFDAD6);
+    c.onErrorContainer = dark ? QColor(0xFFDAD6) : QColor(0x410002);
+
+    c.inverseSurface = windowText;
+    c.inverseOnSurface = window;
+
+    m_colors = c;
+    m_isDark = dark;
+}
+
 void ThemeManager::applyTheme(Theme theme)
 {
     m_currentTheme = theme;
+
+    if (isNativeStyle()) {
+        applyNativeStyle();
+        emit themeChanged(theme);
+        return;
+    }
+
     qApp->setStyle(QStyleFactory::create("Fusion"));
 
     switch (theme) {
